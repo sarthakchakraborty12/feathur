@@ -1,0 +1,6 @@
+{
+  "name": "Feathur",
+  "description": "A lightweight, secure, and native offline document opener/viewer for PowerPoint (.pptx), Excel (.xlsx), Word (.docx), and SVG files, designed strictly around Material 3 standards.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

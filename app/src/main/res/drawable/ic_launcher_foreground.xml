@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    
+    <!-- Feather solid premium vane body with smooth curves and a custom cutout as a single solid shape -->
+    <path
+        android:fillColor="#F1F5F9"
+        android:pathData="M32,76 C37,71 43,66 48,63 C39,66 35,60 39,52 C45,34 68,22 86,26 C80,40 65,55 56,57 C53,57.5 54,60 56,61.5 C50,62 46,59 44,61 C42.5,62.5 45,67 43,69 C39.5,73 35,77.5 32,76 Z" />
+</vector>
