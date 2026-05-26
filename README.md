@@ -43,7 +43,7 @@ Feathur is designed to solve a simple problem: opening office documents on the g
 - **Cell Details Action**: Cell selection outline showing cell content details in a bottom sheet with a quick clipboard copy button.
 - **Fit Cells to Content**: Toggle auto-scaling column widths to prevent text truncation in dense columns.
 
-### slide Microsoft PowerPoint (`.pptx`, `.ppt`)
+### ▶️ Microsoft PowerPoint (`.pptx`, `.ppt`)
 - **Pre-rendered Slide Graphics**: Parses slides dynamically to compile text layers, backgrounds, shapes, and images.
 - **Smooth Decodes**: Asynchronous background-threaded image decoding (on `Dispatchers.IO`) prevents frame drops while scrolling slides.
 - **Auto-Centering Placeholders**: Automatically handles slides using default layout layouts by centering non-positional texts in a dedicated vertical flow.
