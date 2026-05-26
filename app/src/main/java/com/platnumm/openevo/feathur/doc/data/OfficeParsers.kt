@@ -7,6 +7,8 @@ import android.util.Xml
 import org.xmlpull.v1.XmlPullParser
 import java.io.InputStream
 import java.util.zip.ZipInputStream
+import kotlinx.coroutines.ensureActive
+import kotlin.coroutines.coroutineContext
 
 // --- Models for Word Document Viewer (.docx) ---
 sealed class DocxElement {
@@ -95,12 +97,13 @@ object OfficeParsers {
     private const val TAG = "OfficeParsers"
 
     // Parse DOCX
-    fun parseDocx(inputStream: InputStream): ParsedDocument.Word {
+    suspend fun parseDocx(inputStream: InputStream): ParsedDocument.Word {
         val elements = mutableListOf<DocxElement>()
         try {
             val zip = ZipInputStream(inputStream)
             var entry = zip.nextEntry
             while (entry != null) {
+                coroutineContext.ensureActive()
                 if (entry.name == "word/document.xml") {
                     elements.addAll(readDocumentXml(zip))
                     break
@@ -115,7 +118,7 @@ object OfficeParsers {
         return ParsedDocument.Word(elements)
     }
 
-    private fun readDocumentXml(inputStream: InputStream): List<DocxElement> {
+    private suspend fun readDocumentXml(inputStream: InputStream): List<DocxElement> {
         val list = mutableListOf<DocxElement>()
         try {
             val parser = Xml.newPullParser()
@@ -135,6 +138,7 @@ object OfficeParsers {
             var inRun = false
 
             while (eventType != XmlPullParser.END_DOCUMENT) {
+                coroutineContext.ensureActive()
                 val tag = parser.name
                 when (eventType) {
                     XmlPullParser.START_TAG -> {
@@ -225,7 +229,7 @@ object OfficeParsers {
     }
 
     // Parse XLSX
-    fun parseXlsx(inputStream: InputStream): ParsedDocument.Excel {
+    suspend fun parseXlsx(inputStream: InputStream): ParsedDocument.Excel {
         val sheets = mutableListOf<ExcelSheet>()
         val sharedStrings = mutableListOf<String>()
         val sheetsToParse = mutableListOf<Pair<String, String>>() // (name, file_path)
@@ -240,6 +244,7 @@ object OfficeParsers {
             val zip = ZipInputStream(inputStream)
             var entry = zip.nextEntry
             while (entry != null) {
+                coroutineContext.ensureActive()
                 if (entry.name == "xl/sharedStrings.xml" || 
                     entry.name == "xl/workbook.xml" || 
                     entry.name.startsWith("xl/worksheets/sheet")) {
@@ -271,6 +276,7 @@ object OfficeParsers {
                 })
 
             sheetEntries.forEachIndexed { index, entryName ->
+                coroutineContext.ensureActive()
                 val sheetName = sheetIdsToNames[entryName] ?: sheetIdsToNames[(index + 1).toString()] ?: "Sheet ${index + 1}"
                 val sheetBytes = cachedEntries[entryName]
                 if (sheetBytes != null) {
@@ -359,7 +365,7 @@ object OfficeParsers {
         return map
     }
 
-    private fun parseSingleSheet(
+    private suspend fun parseSingleSheet(
         sheetName: String, 
         inputStream: InputStream, 
         sharedStrings: List<String>
@@ -378,6 +384,7 @@ object OfficeParsers {
             var cellRef = ""
 
             while (eventType != XmlPullParser.END_DOCUMENT) {
+                coroutineContext.ensureActive()
                 val tag = parser.name
                 when (eventType) {
                     XmlPullParser.START_TAG -> {
@@ -447,17 +454,18 @@ object OfficeParsers {
     }
 
     // Parse PPTX (Slides)
-    fun parsePptx(inputStream: InputStream): ParsedDocument.Slides {
+    suspend fun parsePptx(inputStream: InputStream): ParsedDocument.Slides {
         val list = mutableListOf<SlideItem>()
         try {
             val cachedEntries = mutableMapOf<String, ByteArray>()
             val zip = ZipInputStream(inputStream)
             var entry = zip.nextEntry
             while (entry != null) {
+                coroutineContext.ensureActive()
                 if (entry.name == "ppt/presentation.xml" ||
-                    (entry.name.startsWith("ppt/slides/slide") && entry.name.endsWith(".xml")) ||
-                    (entry.name.startsWith("ppt/slides/_rels/slide") && entry.name.endsWith(".xml.rels")) ||
-                    entry.name.startsWith("ppt/media/")
+                     (entry.name.startsWith("ppt/slides/slide") && entry.name.endsWith(".xml")) ||
+                     (entry.name.startsWith("ppt/slides/_rels/slide") && entry.name.endsWith(".xml.rels")) ||
+                     entry.name.startsWith("ppt/media/")
                 ) {
                     cachedEntries[entry.name] = zip.readBytes()
                 }
@@ -500,6 +508,7 @@ object OfficeParsers {
             })
 
             slideEntries.forEachIndexed { index, entryName ->
+                coroutineContext.ensureActive()
                 val slideBytes = cachedEntries[entryName]
                 if (slideBytes != null) {
                     // Parse slide relations to resolve images
@@ -577,7 +586,7 @@ object OfficeParsers {
         return color
     }
 
-    private fun parseSingleSlideGraphic(
+    private suspend fun parseSingleSlideGraphic(
         inputStream: InputStream,
         relsMap: Map<String, String>,
         cachedEntries: Map<String, ByteArray>,
@@ -615,6 +624,7 @@ object OfficeParsers {
             var shapeColor: Long? = null
 
             while (eventType != XmlPullParser.END_DOCUMENT) {
+                coroutineContext.ensureActive()
                 val tag = parser.name
                 when (eventType) {
                     XmlPullParser.START_TAG -> {
@@ -861,7 +871,7 @@ object OfficeParsers {
     }
 
     // Comprehensive parsing entry-point
-    fun parseUri(context: Context, uri: Uri): ParsedDocument {
+    suspend fun parseUri(context: Context, uri: Uri): ParsedDocument {
         val cacheFile = getCacheFileForUri(context, uri)
         var inputStream: InputStream? = null
 

@@ -229,7 +229,7 @@ fun HomeScreen(viewModel: FeathurViewModel, onOpenSettings: () -> Unit) {
                                 verticalArrangement = Arrangement.spacedBy(4.dp)
                             ) {
                                 Text(
-                                    text = "Feathur Office Opener",
+                                    text = "Feathur - Office Files Viewer",
                                     style = MaterialTheme.typography.titleMedium,
                                     fontWeight = FontWeight.ExtraBold,
                                     color = MaterialTheme.colorScheme.onPrimaryContainer
@@ -251,6 +251,7 @@ fun HomeScreen(viewModel: FeathurViewModel, onOpenSettings: () -> Unit) {
                                     FormatBadge("DOCX", Color(0xFF2B579A))
                                     FormatBadge("XLSX", Color(0xFF107C41))
                                     FormatBadge("PPTX", Color(0xFFD24726))
+                                    FormatBadge("TXT", Color(0xFF64748B))
                                 }
                             }
                         }
@@ -782,7 +783,7 @@ fun DocumentContentPane(
         is ParsedDocument.Word -> DocxViewer(doc, searchQuery, viewModel)
         is ParsedDocument.Excel -> XlsxViewer(doc, searchQuery, viewModel)
         is ParsedDocument.Slides -> PptxViewer(doc, searchQuery, viewModel)
-        is ParsedDocument.Text -> PlainTextViewer(doc, searchQuery)
+        is ParsedDocument.Text -> PlainTextViewer(doc, searchQuery, viewModel)
     }
 }
 
@@ -825,111 +826,113 @@ fun DocxViewer(doc: ParsedDocument.Word, searchQuery: String, viewModel: Feathur
         }
     }
 
-    LazyColumn(
-        state = listState,
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
-    ) {
-        itemsIndexed(doc.elements) { idx, elem ->
-            val isCurrentMatch = remember(matches, searchMatchIndex, idx) {
-                matches.isNotEmpty() && searchMatchIndex in matches.indices && matches[searchMatchIndex] == idx
-            }
-            val borderModifier = if (isCurrentMatch) {
-                Modifier.border(2.dp, Color(0xFFFDE047), RoundedCornerShape(8.dp)).padding(4.dp)
-            } else Modifier
-            
-            Box(modifier = borderModifier) {
-                when (elem) {
-                    is DocxElement.Paragraph -> {
-                        val annotatedString = buildAnnotatedString {
-                            if (elem.runs.isEmpty()) {
-                                val textVal = elem.text
-                                if (searchQuery.isNotBlank() && textVal.contains(searchQuery, ignoreCase = true)) {
-                                    var startIdx = 0
-                                    while (true) {
-                                        val matchIdx = textVal.indexOf(searchQuery, startIdx, ignoreCase = true)
-                                        if (matchIdx == -1) {
-                                            append(textVal.substring(startIdx))
-                                            break
-                                        }
-                                        append(textVal.substring(startIdx, matchIdx))
-                                        withStyle(style = SpanStyle(background = Color(0xFFFDE047), color = Color.Black)) {
-                                            append(textVal.substring(matchIdx, matchIdx + searchQuery.length))
-                                        }
-                                        startIdx = matchIdx + searchQuery.length
-                                    }
-                                } else {
-                                    append(textVal)
-                                }
-                            } else {
-                                elem.runs.forEach { run ->
-                                    val runText = run.text
-                                    if (searchQuery.isNotBlank() && runText.contains(searchQuery, ignoreCase = true)) {
+    androidx.compose.foundation.text.selection.SelectionContainer {
+        LazyColumn(
+            state = listState,
+            modifier = Modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.background)
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            itemsIndexed(doc.elements) { idx, elem ->
+                val isCurrentMatch = remember(matches, searchMatchIndex, idx) {
+                    matches.isNotEmpty() && searchMatchIndex in matches.indices && matches[searchMatchIndex] == idx
+                }
+                val borderModifier = if (isCurrentMatch) {
+                    Modifier.border(2.dp, Color(0xFFFDE047), RoundedCornerShape(8.dp)).padding(4.dp)
+                } else Modifier
+                
+                Box(modifier = borderModifier) {
+                    when (elem) {
+                        is DocxElement.Paragraph -> {
+                            val annotatedString = buildAnnotatedString {
+                                if (elem.runs.isEmpty()) {
+                                    val textVal = elem.text
+                                    if (searchQuery.isNotBlank() && textVal.contains(searchQuery, ignoreCase = true)) {
                                         var startIdx = 0
                                         while (true) {
-                                            val matchIdx = runText.indexOf(searchQuery, startIdx, ignoreCase = true)
+                                            val matchIdx = textVal.indexOf(searchQuery, startIdx, ignoreCase = true)
                                             if (matchIdx == -1) {
-                                                withStyle(
-                                                    style = SpanStyle(
-                                                        fontWeight = if (run.isBold) FontWeight.Bold else FontWeight.Normal,
-                                                        fontStyle = if (run.isItalic) androidx.compose.ui.text.font.FontStyle.Italic else androidx.compose.ui.text.font.FontStyle.Normal,
-                                                        fontSize = run.size.sp
-                                                    )
-                                                ) {
-                                                    append(runText.substring(startIdx))
-                                                }
+                                                append(textVal.substring(startIdx))
                                                 break
                                             }
-                                            if (matchIdx > startIdx) {
-                                                withStyle(
-                                                    style = SpanStyle(
-                                                        fontWeight = if (run.isBold) FontWeight.Bold else FontWeight.Normal,
-                                                        fontStyle = if (run.isItalic) androidx.compose.ui.text.font.FontStyle.Italic else androidx.compose.ui.text.font.FontStyle.Normal,
-                                                        fontSize = run.size.sp
-                                                    )
-                                                ) {
-                                                    append(runText.substring(startIdx, matchIdx))
-                                                }
-                                            }
-                                            withStyle(
-                                                style = SpanStyle(
-                                                    fontWeight = if (run.isBold) FontWeight.Bold else FontWeight.Normal,
-                                                    fontStyle = if (run.isItalic) androidx.compose.ui.text.font.FontStyle.Italic else androidx.compose.ui.text.font.FontStyle.Normal,
-                                                    fontSize = run.size.sp,
-                                                    background = Color(0xFFFDE047),
-                                                    color = Color.Black
-                                                )
-                                            ) {
-                                                append(runText.substring(matchIdx, matchIdx + searchQuery.length))
+                                            append(textVal.substring(startIdx, matchIdx))
+                                            withStyle(style = SpanStyle(background = Color(0xFFFDE047), color = Color.Black)) {
+                                                append(textVal.substring(matchIdx, matchIdx + searchQuery.length))
                                             }
                                             startIdx = matchIdx + searchQuery.length
                                         }
                                     } else {
-                                        withStyle(
-                                            style = SpanStyle(
-                                                fontWeight = if (run.isBold) FontWeight.Bold else FontWeight.Normal,
-                                                fontStyle = if (run.isItalic) androidx.compose.ui.text.font.FontStyle.Italic else androidx.compose.ui.text.font.FontStyle.Normal,
-                                                fontSize = run.size.sp
-                                            )
-                                        ) {
-                                            append(runText)
+                                        append(textVal)
+                                    }
+                                } else {
+                                    elem.runs.forEach { run ->
+                                        val runText = run.text
+                                        if (searchQuery.isNotBlank() && runText.contains(searchQuery, ignoreCase = true)) {
+                                            var startIdx = 0
+                                            while (true) {
+                                                val matchIdx = runText.indexOf(searchQuery, startIdx, ignoreCase = true)
+                                                if (matchIdx == -1) {
+                                                    withStyle(
+                                                        style = SpanStyle(
+                                                            fontWeight = if (run.isBold) FontWeight.Bold else FontWeight.Normal,
+                                                            fontStyle = if (run.isItalic) androidx.compose.ui.text.font.FontStyle.Italic else androidx.compose.ui.text.font.FontStyle.Normal,
+                                                            fontSize = run.size.sp
+                                                        )
+                                                    ) {
+                                                        append(runText.substring(startIdx))
+                                                    }
+                                                    break
+                                                }
+                                                if (matchIdx > startIdx) {
+                                                    withStyle(
+                                                        style = SpanStyle(
+                                                            fontWeight = if (run.isBold) FontWeight.Bold else FontWeight.Normal,
+                                                            fontStyle = if (run.isItalic) androidx.compose.ui.text.font.FontStyle.Italic else androidx.compose.ui.text.font.FontStyle.Normal,
+                                                            fontSize = run.size.sp
+                                                        )
+                                                    ) {
+                                                        append(runText.substring(startIdx, matchIdx))
+                                                    }
+                                                }
+                                                withStyle(
+                                                    style = SpanStyle(
+                                                        fontWeight = if (run.isBold) FontWeight.Bold else FontWeight.Normal,
+                                                        fontStyle = if (run.isItalic) androidx.compose.ui.text.font.FontStyle.Italic else androidx.compose.ui.text.font.FontStyle.Normal,
+                                                        fontSize = run.size.sp,
+                                                        background = Color(0xFFFDE047),
+                                                        color = Color.Black
+                                                    )
+                                                ) {
+                                                    append(runText.substring(matchIdx, matchIdx + searchQuery.length))
+                                                }
+                                                startIdx = matchIdx + searchQuery.length
+                                            }
+                                        } else {
+                                            withStyle(
+                                                style = SpanStyle(
+                                                    fontWeight = if (run.isBold) FontWeight.Bold else FontWeight.Normal,
+                                                    fontStyle = if (run.isItalic) androidx.compose.ui.text.font.FontStyle.Italic else androidx.compose.ui.text.font.FontStyle.Normal,
+                                                    fontSize = run.size.sp
+                                                )
+                                            ) {
+                                                append(runText)
+                                            }
                                         }
                                     }
                                 }
                             }
-                        }
 
-                        Text(
-                            text = annotatedString,
-                            style = MaterialTheme.typography.bodyMedium.copy(lineHeight = 22.sp),
-                            color = MaterialTheme.colorScheme.onBackground
-                        )
-                    }
-                    is DocxElement.Table -> {
-                        TableRenderer(table = elem, searchQuery = searchQuery)
+                            Text(
+                                text = annotatedString,
+                                style = MaterialTheme.typography.bodyMedium.copy(lineHeight = 22.sp),
+                                color = MaterialTheme.colorScheme.onBackground
+                            )
+                        }
+                        is DocxElement.Table -> {
+                            TableRenderer(table = elem, searchQuery = searchQuery)
+                        }
                     }
                 }
             }
@@ -1452,7 +1455,18 @@ fun GraphicalSlideItem(slide: SlideItem, searchQuery: String) {
         val containerWidth = maxWidth
         val containerHeight = maxHeight
 
-        slide.elements.forEach { element ->
+        val positionalElements = slide.elements.filter { element ->
+            when (element) {
+                is SlideGraphicElement.ImageBlock -> true
+                is SlideGraphicElement.TextBlock -> (element.x != 0f || element.y != 0f)
+                is SlideGraphicElement.ShapeBlock -> (element.x != 0f || element.y != 0f)
+            }
+        }
+
+        val nonPositionalTexts = slide.elements.filterIsInstance<SlideGraphicElement.TextBlock>()
+            .filter { it.x == 0f && it.y == 0f }
+
+        positionalElements.forEach { element ->
             when (element) {
                 is SlideGraphicElement.ShapeBlock -> {
                     // Do not render vector background/decoration shapes to avoid overlapping actual content
@@ -1509,6 +1523,32 @@ fun GraphicalSlideItem(slide: SlideItem, searchQuery: String) {
                 }
             }
         }
+
+        if (nonPositionalTexts.isNotEmpty()) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.Center,
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                nonPositionalTexts.forEach { element ->
+                    HighlightText(
+                        text = element.text,
+                        query = searchQuery,
+                        style = androidx.compose.ui.text.TextStyle(
+                            fontSize = (element.fontSize * (containerHeight.value / 350f)).coerceAtLeast(14f).sp,
+                            fontWeight = if (element.isBold) FontWeight.Bold else FontWeight.Normal,
+                            fontStyle = if (element.isItalic) androidx.compose.ui.text.font.FontStyle.Italic else androidx.compose.ui.text.font.FontStyle.Normal,
+                            color = Color(element.textColor),
+                            textAlign = TextAlign.Center
+                        ),
+                        color = Color(element.textColor),
+                        modifier = Modifier.padding(vertical = 4.dp)
+                    )
+                }
+            }
+        }
     }
 }
 
@@ -1518,10 +1558,11 @@ fun HighlightText(
     query: String,
     style: androidx.compose.ui.text.TextStyle,
     color: Color,
+    modifier: Modifier = Modifier,
     maxLines: Int = Int.MAX_VALUE
 ) {
     if (query.isBlank() || !text.contains(query, ignoreCase = true)) {
-        Text(text = text, style = style, color = color, maxLines = maxLines, overflow = TextOverflow.Ellipsis)
+        Text(text = text, style = style, color = color, modifier = modifier, maxLines = maxLines, overflow = TextOverflow.Ellipsis)
         return
     }
 
@@ -1541,7 +1582,7 @@ fun HighlightText(
         }
     }
 
-    Text(text = highlightedString, style = style, maxLines = maxLines, overflow = TextOverflow.Ellipsis)
+    Text(text = highlightedString, style = style, modifier = modifier, maxLines = maxLines, overflow = TextOverflow.Ellipsis)
 }
 
 // 4. PPT/PPTX PPT Slideshow Presentation Mode Full-Screen Viewport
@@ -1659,22 +1700,71 @@ fun FullScreenPresentation(viewModel: FeathurViewModel, presentation: SlideDocum
 
 // 6. Support for simple plain text documents (.txt fallback viewer)
 @Composable
-fun PlainTextViewer(doc: ParsedDocument.Text, searchQuery: String) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(16.dp)
-    ) {
-        HighlightText(
-            text = doc.content,
-            query = searchQuery,
-            style = MaterialTheme.typography.bodyMedium.copy(
-                fontFamily = FontFamily.Monospace,
-                lineHeight = 20.sp
-            ),
-            color = MaterialTheme.colorScheme.onBackground
-        )
+fun PlainTextViewer(doc: ParsedDocument.Text, searchQuery: String, viewModel: FeathurViewModel) {
+    val lines = remember(doc.content) { doc.content.lines() }
+
+    if (lines.isEmpty()) {
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Text("No text content found.")
+        }
+        return
+    }
+
+    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+    val searchMatchIndex by viewModel.searchMatchIndex.collectAsState()
+
+    val matches = remember(lines, searchQuery) {
+        val list = mutableListOf<Int>()
+        if (searchQuery.isNotBlank()) {
+            lines.forEachIndexed { idx, line ->
+                if (line.contains(searchQuery, ignoreCase = true)) {
+                    list.add(idx)
+                }
+            }
+        }
+        list
+    }
+
+    LaunchedEffect(matches) {
+        viewModel.setSearchMatchCount(matches.size)
+    }
+
+    LaunchedEffect(searchMatchIndex, matches) {
+        if (matches.isNotEmpty() && searchMatchIndex in matches.indices) {
+            listState.animateScrollToItem(matches[searchMatchIndex])
+        }
+    }
+
+    androidx.compose.foundation.text.selection.SelectionContainer {
+        LazyColumn(
+            state = listState,
+            modifier = Modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.background)
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            itemsIndexed(lines) { idx, line ->
+                val isCurrentMatch = remember(matches, searchMatchIndex, idx) {
+                    matches.isNotEmpty() && searchMatchIndex in matches.indices && matches[searchMatchIndex] == idx
+                }
+                val borderModifier = if (isCurrentMatch) {
+                    Modifier.border(2.dp, Color(0xFFFDE047), RoundedCornerShape(4.dp)).padding(4.dp)
+                } else Modifier
+
+                Box(modifier = borderModifier) {
+                    HighlightText(
+                        text = line,
+                        query = searchQuery,
+                        style = MaterialTheme.typography.bodyMedium.copy(
+                            fontFamily = FontFamily.Monospace,
+                            lineHeight = 20.sp
+                        ),
+                        color = MaterialTheme.colorScheme.onBackground
+                    )
+                }
+            }
+        }
     }
 }
 

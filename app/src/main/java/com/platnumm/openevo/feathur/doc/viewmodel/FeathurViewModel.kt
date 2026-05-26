@@ -82,8 +82,11 @@ class FeathurViewModel(
             initialValue = emptyList()
         )
 
+    private var activeParseJob: kotlinx.coroutines.Job? = null
+
     fun openDocument(context: Context, uri: Uri) {
-        viewModelScope.launch {
+        activeParseJob?.cancel()
+        activeParseJob = viewModelScope.launch {
             try {
                 val takeFlags: Int = Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
                 context.contentResolver.takePersistableUriPermission(uri, takeFlags)
@@ -142,6 +145,8 @@ class FeathurViewModel(
     }
 
     fun closeDocument() {
+        activeParseJob?.cancel()
+        activeParseJob = null
         _selectedDocumentUri.value = null
         _parsedDocument.value = null
         _error.value = null

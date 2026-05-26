@@ -119,3 +119,17 @@ dependencies {
   "ksp"(libs.androidx.room.compiler)
   "ksp"(libs.moshi.kotlin.codegen)
 }
+
+tasks.register<Copy>("copyReleaseApk") {
+    from(layout.buildDirectory.dir("outputs/apk/release")) {
+        include("app-release.apk")
+        rename { "feathur-release.apk" }
+    }
+    into(rootProject.layout.projectDirectory.dir("releases"))
+}
+
+afterEvaluate {
+    tasks.named("assembleRelease") {
+        finalizedBy("copyReleaseApk")
+    }
+}
