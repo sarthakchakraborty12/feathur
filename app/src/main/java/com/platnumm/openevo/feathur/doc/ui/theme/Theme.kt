@@ -10,6 +10,8 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.platform.LocalContext
 
+import androidx.compose.ui.graphics.Color
+
 private val DarkColorScheme =
   darkColorScheme(primary = Purple80, secondary = PurpleGrey80, tertiary = Pink80)
 
@@ -18,35 +20,63 @@ private val LightColorScheme =
     primary = Purple40,
     secondary = PurpleGrey40,
     tertiary = Pink40,
-
-    /* Other default colors to override
-    background = Color(0xFFFFFBFE),
-    surface = Color(0xFFFFFBFE),
-    onPrimary = Color.White,
-    onSecondary = Color.White,
-    onTertiary = Color.White,
-    onBackground = Color(0xFF1C1B1F),
-    onSurface = Color(0xFF1C1B1F),
-    */
   )
 
 @Composable
 fun MyApplicationTheme(
-  darkTheme: Boolean = isSystemInDarkTheme(),
-  // Dynamic color is available on Android 12+
-  dynamicColor: Boolean = true,
+  darkModeSetting: String = "adapt_device",
+  themeSetting: String = "device_wallpaper",
   content: @Composable () -> Unit,
 ) {
-  val colorScheme =
-    when {
-      dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
-        val context = LocalContext.current
-        if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
-      }
+  val darkTheme = when (darkModeSetting) {
+    "on" -> true
+    "off" -> false
+    else -> isSystemInDarkTheme()
+  }
 
-      darkTheme -> DarkColorScheme
-      else -> LightColorScheme
+  val context = LocalContext.current
+  val colorScheme = when {
+    themeSetting == "monochrome" -> {
+      if (darkTheme) {
+        darkColorScheme(
+          primary = Color.White,
+          onPrimary = Color.Black,
+          primaryContainer = Color(0xFF374151),
+          onPrimaryContainer = Color.White,
+          secondary = Color(0xFF9CA3AF),
+          onSecondary = Color.Black,
+          background = Color(0xFF111827),
+          onBackground = Color.White,
+          surface = Color(0xFF1F2937),
+          onSurface = Color.White,
+          surfaceVariant = Color(0xFF374151),
+          onSurfaceVariant = Color(0xFFD1D5DB),
+          outline = Color(0xFF4B5563)
+        )
+      } else {
+        lightColorScheme(
+          primary = Color.Black,
+          onPrimary = Color.White,
+          primaryContainer = Color(0xFFE5E7EB),
+          onPrimaryContainer = Color.Black,
+          secondary = Color(0xFF4B5563),
+          onSecondary = Color.White,
+          background = Color.White,
+          onBackground = Color.Black,
+          surface = Color(0xFFF3F4F6),
+          onSurface = Color.Black,
+          surfaceVariant = Color(0xFFE5E7EB),
+          onSurfaceVariant = Color(0xFF374151),
+          outline = Color(0xFFD1D5DB)
+        )
+      }
     }
+    Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
+      if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
+    }
+    darkTheme -> DarkColorScheme
+    else -> LightColorScheme
+  }
 
   MaterialTheme(colorScheme = colorScheme, typography = Typography, content = content)
 }

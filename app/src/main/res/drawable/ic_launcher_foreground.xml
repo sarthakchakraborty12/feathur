@@ -1,12 +1,28 @@
 <?xml version="1.0" encoding="utf-8"?>
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    
-    <!-- Feather solid premium vane body with smooth curves and a custom cutout as a single solid shape -->
-    <path
-        android:fillColor="#F1F5F9"
-        android:pathData="M32,76 C37,71 43,66 48,63 C39,66 35,60 39,52 C45,34 68,22 86,26 C80,40 65,55 56,57 C53,57.5 54,60 56,61.5 C50,62 46,59 44,61 C42.5,62.5 45,67 43,69 C39.5,73 35,77.5 32,76 Z" />
+    <group
+        android:translateX="26.0"
+        android:translateY="28.96"
+        android:scaleX="0.0856"
+        android:scaleY="0.0856">
+        <path
+            android:pathData="M649.268 -3.98721e-05C443.56 51.9742 48.6701 221.759 111.667 484.048C132.6 516.087 42.0675 555.524 -0.000337615 573.217L33.3384 584.563C46.8098 583.957 91.2597 566.383 148.883 496.713C220.912 409.626 271.181 488.157 378.103 453.606C463.64 425.965 488.738 377.639 490.595 356.931C407.137 353.04 285.812 335.858 468.172 298.258C650.531 260.658 664.886 83.7526 649.268 -3.98721e-05Z">
+            <aapt:attr name="android:fillColor">
+                <gradient
+                    android:type="linear"
+                    android:startX="112.245"
+                    android:startY="501.708"
+                    android:endX="670.02"
+                    android:endY="31.2857">
+                    <item android:color="#FFFFFF" android:offset="0.0" />
+                    <item android:color="#ABABAB" android:offset="1.0" />
+                </gradient>
+            </aapt:attr>
+        </path>
+    </group>
 </vector>

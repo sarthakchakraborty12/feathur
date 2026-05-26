@@ -48,13 +48,39 @@ data class SlideDocument(
 
 data class SlideItem(
     val index: Int,
-    val elements: List<SlideElement>
+    val elements: List<SlideGraphicElement>,
+    val backgroundColor: Long = 0xFFFFFFFF
 )
 
-sealed class SlideElement {
-    data class Title(val text: String) : SlideElement()
-    data class Body(val bullets: List<String>) : SlideElement()
-    data class TextBlock(val text: String) : SlideElement()
+sealed class SlideGraphicElement {
+    data class TextBlock(
+        val text: String,
+        val textColor: Long, // ARGB
+        val fontSize: Float, // sp
+        val isBold: Boolean,
+        val isItalic: Boolean,
+        val x: Float, // 0..1
+        val y: Float, // 0..1
+        val width: Float, // 0..1
+        val height: Float // 0..1
+    ) : SlideGraphicElement()
+
+    data class ImageBlock(
+        val bitmap: android.graphics.Bitmap,
+        val x: Float,
+        val y: Float,
+        val width: Float,
+        val height: Float
+    ) : SlideGraphicElement()
+
+    data class ShapeBlock(
+        val shapeType: String,
+        val color: Long,
+        val x: Float,
+        val y: Float,
+        val width: Float,
+        val height: Float
+    ) : SlideGraphicElement()
 }
 
 // --- High level parsed result ---
@@ -62,7 +88,6 @@ sealed class ParsedDocument {
     data class Word(val elements: List<DocxElement>) : ParsedDocument()
     data class Excel(val workbook: ExcelWorkbook) : ParsedDocument()
     data class Slides(val presentation: SlideDocument) : ParsedDocument()
-    data class Svg(val rawSvgText: String) : ParsedDocument()
     data class Text(val content: String) : ParsedDocument()
 }
 
@@ -429,7 +454,11 @@ object OfficeParsers {
             val zip = ZipInputStream(inputStream)
             var entry = zip.nextEntry
             while (entry != null) {
-                if (entry.name.startsWith("ppt/slides/slide") && entry.name.endsWith(".xml")) {
+                if (entry.name == "ppt/presentation.xml" ||
+                    (entry.name.startsWith("ppt/slides/slide") && entry.name.endsWith(".xml")) ||
+                    (entry.name.startsWith("ppt/slides/_rels/slide") && entry.name.endsWith(".xml.rels")) ||
+                    entry.name.startsWith("ppt/media/")
+                ) {
                     cachedEntries[entry.name] = zip.readBytes()
                 }
                 zip.closeEntry()
@@ -437,21 +466,78 @@ object OfficeParsers {
             }
             zip.close()
 
-            // Sort slides naturally slide1, slide2, slide10
-            val sortedSlides = cachedEntries.keys.sortedWith(compareBy { entryName ->
+            // 1. Get slide dimensions from ppt/presentation.xml
+            var slideCx = 12192000f // 16:9 default
+            var slideCy = 6858000f
+            val presentationBytes = cachedEntries["ppt/presentation.xml"]
+            if (presentationBytes != null) {
+                try {
+                    val parser = Xml.newPullParser()
+                    parser.setInput(presentationBytes.inputStream(), "UTF-8")
+                    var eventType = parser.eventType
+                    while (eventType != XmlPullParser.END_DOCUMENT) {
+                        if (eventType == XmlPullParser.START_TAG && parser.name == "sldSz") {
+                            val cxStr = parser.getAttributeValue(null, "cx")
+                            val cyStr = parser.getAttributeValue(null, "cy")
+                            if (cxStr != null && cyStr != null) {
+                                slideCx = cxStr.toFloatOrNull() ?: slideCx
+                                slideCy = cyStr.toFloatOrNull() ?: slideCy
+                            }
+                            break
+                        }
+                        eventType = parser.next()
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error parsing sldSz", e)
+                }
+            }
+
+            // 2. Sort slide files naturally (slide1.xml, slide2.xml, slide10.xml)
+            val slideEntries = cachedEntries.keys.filter { 
+                it.startsWith("ppt/slides/slide") && !it.contains("_rels") && it.endsWith(".xml") 
+            }.sortedWith(compareBy { entryName ->
                 entryName.filter { it.isDigit() }.toIntOrNull() ?: 0
             })
 
-            sortedSlides.forEachIndexed { index, entryName ->
+            slideEntries.forEachIndexed { index, entryName ->
                 val slideBytes = cachedEntries[entryName]
                 if (slideBytes != null) {
-                    val elements = parseSingleSlide(slideBytes.inputStream())
-                    list.add(SlideItem(index + 1, elements))
+                    // Parse slide relations to resolve images
+                    val slideNum = entryName.filter { it.isDigit() }
+                    val relsEntryName = "ppt/slides/_rels/slide$slideNum.xml.rels"
+                    val relsBytes = cachedEntries[relsEntryName]
+                    val relsMap = mutableMapOf<String, String>() // rId -> Target
+                    if (relsBytes != null) {
+                        try {
+                            val parser = Xml.newPullParser()
+                            parser.setInput(relsBytes.inputStream(), "UTF-8")
+                            var eventType = parser.eventType
+                            while (eventType != XmlPullParser.END_DOCUMENT) {
+                                if (eventType == XmlPullParser.START_TAG && parser.name == "Relationship") {
+                                    val rId = parser.getAttributeValue(null, "Id")
+                                    val target = parser.getAttributeValue(null, "Target")
+                                    if (rId != null && target != null) {
+                                        relsMap[rId] = target
+                                    }
+                                }
+                                eventType = parser.next()
+                            }
+                        } catch (e: Exception) {
+                            Log.e(TAG, "Error parsing rels for slide $slideNum", e)
+                        }
+                    }
+
+                    val elements = parseSingleSlideGraphic(slideBytes.inputStream(), relsMap, cachedEntries, slideCx, slideCy)
+                    val bgColor = parseSlideBackgroundColor(slideBytes.inputStream())
+                    list.add(SlideItem(index + 1, elements, bgColor))
                 }
             }
 
             if (list.isEmpty()) {
-                list.add(SlideItem(1, listOf(SlideElement.Title("Empty Presentation"), SlideElement.TextBlock("No slides parsed"))))
+                list.add(SlideItem(1, listOf(
+                    SlideGraphicElement.TextBlock("Empty Presentation", 0xFF000000, 24f, true, false, 0.1f, 0.1f, 0.8f, 0.2f),
+                    SlideGraphicElement.TextBlock("No slides parsed", 0xFF555555, 16f, false, false, 0.1f, 0.3f, 0.8f, 0.1f)
+                ), 0xFFFFFFFF))
             }
         } catch (e: Exception) {
             Log.e(TAG, "Error parsing pptx", e)
@@ -459,118 +545,420 @@ object OfficeParsers {
         return ParsedDocument.Slides(SlideDocument(list))
     }
 
-    private fun parseSingleSlide(inputStream: InputStream): List<SlideElement> {
-        val elements = mutableListOf<SlideElement>()
+    private fun parseSlideBackgroundColor(inputStream: InputStream): Long {
+        var color = 0xFFFFFFFF // Default white
+        try {
+            val parser = Xml.newPullParser()
+            parser.setInput(inputStream, "UTF-8")
+            var eventType = parser.eventType
+            var inBg = false
+            while (eventType != XmlPullParser.END_DOCUMENT) {
+                val tag = parser.name
+                when (eventType) {
+                    XmlPullParser.START_TAG -> {
+                        if (tag == "bg") {
+                            inBg = true
+                        } else if (inBg && tag == "srgbClr") {
+                            val hex = parser.getAttributeValue(null, "val")
+                            if (hex != null) {
+                                color = 0xFF000000L or hex.toLong(16)
+                            }
+                        }
+                    }
+                    XmlPullParser.END_TAG -> {
+                        if (tag == "bg") inBg = false
+                    }
+                }
+                eventType = parser.next()
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error in parseSlideBackgroundColor", e)
+        }
+        return color
+    }
+
+    private fun parseSingleSlideGraphic(
+        inputStream: InputStream,
+        relsMap: Map<String, String>,
+        cachedEntries: Map<String, ByteArray>,
+        slideCx: Float,
+        slideCy: Float
+    ): List<SlideGraphicElement> {
+        val elements = mutableListOf<SlideGraphicElement>()
         try {
             val parser = Xml.newPullParser()
             parser.setInput(inputStream, "UTF-8")
             var eventType = parser.eventType
 
-            var inTxtBody = false
-            var inParagraph = false
-            var inRun = false
-            var currentRunText = StringBuilder()
-            val slideTexts = mutableListOf<String>()
+            var inSp = false
+            var inPic = false
+            var inTxBody = false
+            var inT = false
+            
+            // Current element state
+            var currentX = 0f
+            var currentY = 0f
+            var currentW = 0f
+            var currentH = 0f
+            
+            // Text block state
+            var isBold = false
+            var isItalic = false
+            var fontSize = 18f
+            var textColor = 0xFF000000L
+            val textBuilder = StringBuilder()
+            
+            // Image block state
+            var rEmbed: String? = null
+            
+            // Shape fill state
+            var shapeColor: Long? = null
 
             while (eventType != XmlPullParser.END_DOCUMENT) {
                 val tag = parser.name
                 when (eventType) {
                     XmlPullParser.START_TAG -> {
                         when (tag) {
-                            "txBody" -> inTxtBody = true
-                            "p" -> {
-                                if (inTxtBody) {
-                                    inParagraph = true
+                            "sp" -> {
+                                inSp = true
+                                inPic = false
+                                inTxBody = false
+                                textBuilder.clear()
+                                isBold = false
+                                isItalic = false
+                                fontSize = 18f
+                                textColor = 0xFF000000L
+                                shapeColor = null
+                                currentX = 0f; currentY = 0f; currentW = 0f; currentH = 0f
+                            }
+                            "pic" -> {
+                                inPic = true
+                                inSp = false
+                                inTxBody = false
+                                rEmbed = null
+                                currentX = 0f; currentY = 0f; currentW = 0f; currentH = 0f
+                            }
+                            "txBody" -> {
+                                inTxBody = true
+                            }
+                            "off" -> {
+                                if (inSp || inPic) {
+                                    val xStr = parser.getAttributeValue(null, "x")
+                                    val yStr = parser.getAttributeValue(null, "y")
+                                    if (xStr != null && yStr != null) {
+                                        currentX = (xStr.toFloatOrNull() ?: 0f) / slideCx
+                                        currentY = (yStr.toFloatOrNull() ?: 0f) / slideCy
+                                    }
                                 }
                             }
-                            "r" -> {
-                                if (inParagraph) {
-                                    inRun = true
-                                    currentRunText = StringBuilder()
+                            "ext" -> {
+                                if (inSp || inPic) {
+                                    val cxStr = parser.getAttributeValue(null, "cx")
+                                    val cyStr = parser.getAttributeValue(null, "cy")
+                                    if (cxStr != null && cyStr != null) {
+                                        currentW = (cxStr.toFloatOrNull() ?: 0f) / slideCx
+                                        currentH = (cyStr.toFloatOrNull() ?: 0f) / slideCy
+                                    }
                                 }
+                            }
+                            "srgbClr" -> {
+                                val hex = parser.getAttributeValue(null, "val")
+                                if (hex != null) {
+                                    val parsedColor = 0xFF000000L or hex.toLong(16)
+                                    if (inSp) {
+                                        if (inTxBody) {
+                                            textColor = parsedColor
+                                        } else {
+                                            shapeColor = parsedColor
+                                        }
+                                    }
+                                }
+                            }
+                            "blip" -> {
+                                if (inPic) {
+                                    rEmbed = parser.getAttributeValue("http://schemas.openxmlformats.org/officeDocument/2006/relationships", "embed")
+                                        ?: parser.getAttributeValue(null, "embed")
+                                }
+                            }
+                            "rPr" -> {
+                                if (inSp) {
+                                    val szStr = parser.getAttributeValue(null, "sz")
+                                    if (szStr != null) {
+                                        fontSize = (szStr.toFloatOrNull() ?: 1800f) / 100f
+                                    }
+                                    val bStr = parser.getAttributeValue(null, "b")
+                                    if (bStr == "1" || bStr == "true") {
+                                        isBold = true
+                                    }
+                                    val iStr = parser.getAttributeValue(null, "i")
+                                    if (iStr == "1" || iStr == "true") {
+                                        isItalic = true
+                                    }
+                                }
+                            }
+                            "t" -> {
+                                inT = true
                             }
                         }
                     }
                     XmlPullParser.TEXT -> {
-                        if (inRun) {
-                            currentRunText.append(parser.text)
+                        if (inT) {
+                            textBuilder.append(parser.text)
                         }
                     }
                     XmlPullParser.END_TAG -> {
                         when (tag) {
-                            "r" -> {
-                                inRun = false
-                                val rText = currentRunText.toString().trim()
-                                if (rText.isNotEmpty()) {
-                                    slideTexts.add(rText)
-                                }
-                            }
-                            "p" -> {
-                                inParagraph = false
+                            "t" -> {
+                                inT = false
                             }
                             "txBody" -> {
-                                inTxtBody = false
+                                inTxBody = false
+                            }
+                            "sp" -> {
+                                inSp = false
+                                val fullText = textBuilder.toString().trim()
+                                if (fullText.isNotEmpty()) {
+                                    elements.add(
+                                        SlideGraphicElement.TextBlock(
+                                            text = fullText,
+                                            textColor = textColor,
+                                            fontSize = fontSize,
+                                            isBold = isBold,
+                                            isItalic = isItalic,
+                                            x = currentX,
+                                            y = currentY,
+                                            width = currentW,
+                                            height = currentH
+                                        )
+                                    )
+                                } else if (shapeColor != null) {
+                                    elements.add(
+                                        SlideGraphicElement.ShapeBlock(
+                                            shapeType = "rect",
+                                            color = shapeColor!!,
+                                            x = currentX,
+                                            y = currentY,
+                                            width = currentW,
+                                            height = currentH
+                                        )
+                                    )
+                                }
+                            }
+                            "pic" -> {
+                                inPic = false
+                                if (rEmbed != null) {
+                                    val targetPath = relsMap[rEmbed]
+                                    if (targetPath != null) {
+                                        val cleanPath = if (targetPath.startsWith("../")) {
+                                            "ppt/" + targetPath.removePrefix("../")
+                                        } else {
+                                            targetPath
+                                        }
+                                        val imageBytes = cachedEntries[cleanPath]
+                                        if (imageBytes != null) {
+                                            val bitmap = try {
+                                                android.graphics.BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.size)
+                                            } catch (e: Exception) {
+                                                null
+                                            }
+                                            if (bitmap != null) {
+                                                elements.add(
+                                                    SlideGraphicElement.ImageBlock(
+                                                        bitmap = bitmap,
+                                                        x = currentX,
+                                                        y = currentY,
+                                                        width = currentW,
+                                                        height = currentH
+                                                    )
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
                 }
                 eventType = parser.next()
             }
-
-            // Group found texts creatively into title and bodies
-            if (slideTexts.isNotEmpty()) {
-                val titleText = slideTexts.first()
-                elements.add(SlideElement.Title(titleText))
-                if (slideTexts.size > 1) {
-                    elements.add(SlideElement.Body(slideTexts.drop(1)))
-                }
-            } else {
-                elements.add(SlideElement.Title("Blank Slide"))
-            }
-
         } catch (e: Exception) {
-            Log.e(TAG, "Error in parseSingleSlide", e)
+            Log.e(TAG, "Error in parseSingleSlideGraphic", e)
         }
         return elements
     }
 
+    fun getCacheFileForUri(context: Context, uri: Uri): java.io.File {
+        val cacheDir = java.io.File(context.cacheDir, "recent_docs")
+        if (!cacheDir.exists()) {
+            cacheDir.mkdirs()
+        }
+        val hash = uri.toString().hashCode().toString()
+        val ext = getFileName(context, uri).substringAfterLast(".", "bin").lowercase()
+        return java.io.File(cacheDir, "${hash}.$ext")
+    }
+
+    fun cleanOldCaches(context: Context, currentUri: Uri) {
+        try {
+            val db = FeathurDatabase.getDatabase(context)
+            val recentUris = db.historyDao().getRecentUriStringsSync()
+            val allowedHashes = (recentUris.map { Uri.parse(it).toString().hashCode().toString() } + currentUri.toString().hashCode().toString()).toSet()
+            
+            val cacheDir = java.io.File(context.cacheDir, "recent_docs")
+            if (cacheDir.exists() && cacheDir.isDirectory) {
+                cacheDir.listFiles()?.forEach { file ->
+                    val nameWithoutExt = file.name.substringBeforeLast(".")
+                    if (!allowedHashes.contains(nameWithoutExt)) {
+                        file.delete()
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error cleaning old caches", e)
+        }
+    }
+
+    fun getFilePathFromUri(context: Context, uri: Uri): String? {
+        if (uri.scheme == "file") {
+            return uri.path
+        }
+        if (uri.scheme == "content") {
+            try {
+                val projection = arrayOf(android.provider.MediaStore.MediaColumns.DATA)
+                val cursor = context.contentResolver.query(uri, projection, null, null, null)
+                cursor?.use {
+                    if (it.moveToFirst()) {
+                        val idx = it.getColumnIndex(android.provider.MediaStore.MediaColumns.DATA)
+                        if (idx != -1) {
+                            return it.getString(idx)
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+            }
+            val path = uri.path
+            if (path != null) {
+                if (path.contains("document/raw:")) {
+                    return path.substringAfter("document/raw:")
+                }
+                if (path.contains("/document/primary:")) {
+                    val primaryPath = path.substringAfter("/document/primary:")
+                    return "/storage/emulated/0/$primaryPath"
+                }
+            }
+        }
+        return null
+    }
+
+    fun hasFilePermission(context: Context): Boolean {
+        return if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
+            android.os.Environment.isExternalStorageManager()
+        } else {
+            androidx.core.content.ContextCompat.checkSelfPermission(
+                context,
+                android.Manifest.permission.READ_EXTERNAL_STORAGE
+            ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+        }
+    }
+
     // Comprehensive parsing entry-point
     fun parseUri(context: Context, uri: Uri): ParsedDocument {
-        val contentResolver = context.contentResolver
-        val fileName = getFileName(context, uri).lowercase()
-        val inputStream = contentResolver.openInputStream(uri) 
-            ?: throw IllegalArgumentException("Could not open file input stream")
+        val cacheFile = getCacheFileForUri(context, uri)
+        var inputStream: InputStream? = null
 
-        return when {
-            fileName.endsWith(".docx") || fileName.endsWith(".doc") -> {
-                parseDocx(inputStream)
+        try {
+            // First try reading via ContentResolver
+            inputStream = context.contentResolver.openInputStream(uri)
+            
+            // If succeeded, write a copy to cache
+            if (inputStream != null) {
+                try {
+                    cacheFile.outputStream().use { output ->
+                        inputStream.copyTo(output)
+                    }
+                    inputStream.close()
+                    inputStream = cacheFile.inputStream()
+                    cleanOldCaches(context, uri)
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to write content stream to cache", e)
+                }
             }
-            fileName.endsWith(".xlsx") || fileName.endsWith(".xls") -> {
-                parseXlsx(inputStream)
+        } catch (e: Exception) {
+            // If ContentResolver fails, try direct File API if permission is granted
+            if (hasFilePermission(context)) {
+                val filePath = getFilePathFromUri(context, uri)
+                if (filePath != null) {
+                    try {
+                        val file = java.io.File(filePath)
+                        if (file.exists() && file.canRead()) {
+                            file.inputStream().use { input ->
+                                cacheFile.outputStream().use { output ->
+                                    input.copyTo(output)
+                                }
+                            }
+                            inputStream = cacheFile.inputStream()
+                            cleanOldCaches(context, uri)
+                        }
+                    } catch (ex: Exception) {
+                        Log.e(TAG, "Failed direct file fallback read/cache", ex)
+                    }
+                }
             }
-            fileName.endsWith(".pptx") || fileName.endsWith(".ppt") -> {
-                parsePptx(inputStream)
+
+            // Final fallback: check cache file
+            if (inputStream == null) {
+                if (cacheFile.exists()) {
+                    try {
+                        inputStream = cacheFile.inputStream()
+                    } catch (ex: Exception) {
+                        throw e
+                    }
+                } else {
+                    throw e
+                }
             }
-            fileName.endsWith(".svg") -> {
-                val rawText = inputStream.bufferedReader().use { it.readText() }
-                ParsedDocument.Svg(rawText)
-            }
-            else -> {
-                // Return as clear text fallback
-                val lines = inputStream.bufferedReader().use { it.readText() }
-                ParsedDocument.Text(lines)
+        }
+
+        val finalStream = inputStream ?: throw IllegalArgumentException("Could not open input stream")
+        val fileName = getFileName(context, uri).lowercase()
+
+        return finalStream.use { stream ->
+            when {
+                fileName.endsWith(".docx") || fileName.endsWith(".doc") -> {
+                    parseDocx(stream)
+                }
+                fileName.endsWith(".xlsx") || fileName.endsWith(".xls") -> {
+                    parseXlsx(stream)
+                }
+                fileName.endsWith(".pptx") || fileName.endsWith(".ppt") -> {
+                    parsePptx(stream)
+                }
+                else -> {
+                    val lines = stream.bufferedReader().use { it.readText() }
+                    ParsedDocument.Text(lines)
+                }
             }
         }
     }
 
     fun getFileName(context: Context, uri: Uri): String {
         var name = "Document"
-        val cursor = context.contentResolver.query(uri, null, null, null, null)
-        cursor?.use {
-            if (it.moveToFirst()) {
-                val nameIndex = it.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
-                if (nameIndex != -1) {
-                    name = it.getString(nameIndex)
+        try {
+            val cursor = context.contentResolver.query(uri, null, null, null, null)
+            cursor?.use {
+                if (it.moveToFirst()) {
+                    val nameIndex = it.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                    if (nameIndex != -1) {
+                        name = it.getString(nameIndex)
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error querying filename, using fallback", e)
+            val path = uri.path
+            if (path != null) {
+                val lastSegment = path.substringAfterLast('/')
+                if (lastSegment.isNotEmpty()) {
+                    name = lastSegment
                 }
             }
         }
@@ -579,13 +967,24 @@ object OfficeParsers {
 
     fun getFileSize(context: Context, uri: Uri): Long {
         var size = 0L
-        val cursor = context.contentResolver.query(uri, null, null, null, null)
-        cursor?.use {
-            if (it.moveToFirst()) {
-                val sizeIndex = it.getColumnIndex(android.provider.OpenableColumns.SIZE)
-                if (sizeIndex != -1) {
-                    size = it.getLong(sizeIndex)
+        try {
+            val cursor = context.contentResolver.query(uri, null, null, null, null)
+            cursor?.use {
+                if (it.moveToFirst()) {
+                    val sizeIndex = it.getColumnIndex(android.provider.OpenableColumns.SIZE)
+                    if (sizeIndex != -1) {
+                        size = it.getLong(sizeIndex)
+                    }
                 }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error querying file size, using fallback", e)
+            try {
+                val cacheFile = getCacheFileForUri(context, uri)
+                if (cacheFile.exists()) {
+                    size = cacheFile.length()
+                }
+            } catch (ex: Exception) {
             }
         }
         return size

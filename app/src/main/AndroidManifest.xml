@@ -2,6 +2,9 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
+    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" tools:ignore="ScopedStorage" />
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="29" />
+
     <application
         android:allowBackup="true"
         android:dataExtractionRules="@xml/data_extraction_rules"
@@ -43,9 +46,6 @@
                 <data android:mimeType="application/vnd.openxmlformats-officedocument.presentationml.presentation" />
                 <data android:mimeType="application/vnd.ms-powerpoint" />
                 
-                <!-- SVG Vector Graphics -->
-                <data android:mimeType="image/svg+xml" />
-                
                 <!-- Plain Text Fallback -->
                 <data android:mimeType="text/plain" />
             </intent-filter>
@@ -66,7 +66,6 @@
                 <data android:pathPattern=".*\\.xls" />
                 <data android:pathPattern=".*\\.pptx" />
                 <data android:pathPattern=".*\\.ppt" />
-                <data android:pathPattern=".*\\.svg" />
                 <data android:pathPattern=".*\\.txt" />
             </intent-filter>
         </activity>

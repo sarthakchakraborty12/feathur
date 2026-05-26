@@ -1,13 +1,14 @@
 package com.platnumm.openevo.feathur.doc.ui
 
 import android.content.Context
+import android.content.Intent
 import android.net.Uri
 import android.text.format.Formatter
-import android.webkit.WebView
+import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.*
-import androidx.compose.animation.core.spring
 import androidx.compose.foundation.*
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -23,16 +24,16 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
-import androidx.compose.ui.graphics.RectangleShape
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
@@ -42,9 +43,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.graphics.asImageBitmap
 import com.platnumm.openevo.feathur.doc.R
 import com.platnumm.openevo.feathur.doc.data.*
+import com.platnumm.openevo.feathur.doc.ui.theme.GoogleSansFlexFontFamily
 import com.platnumm.openevo.feathur.doc.viewmodel.FeathurViewModel
 import java.text.SimpleDateFormat
 import java.util.*
@@ -56,8 +58,16 @@ fun FeathurApp(viewModel: FeathurViewModel) {
     val isLoading by viewModel.isLoading.collectAsState()
     val error by viewModel.error.collectAsState()
 
+    var isSettingsOpen by remember { mutableStateOf(false) }
+
     Box(modifier = Modifier.fillMaxSize()) {
         when {
+            isSettingsOpen -> {
+                SettingsScreen(viewModel = viewModel, onBack = { isSettingsOpen = false })
+                BackHandler {
+                    isSettingsOpen = false
+                }
+            }
             selectedUri != null -> {
                 DocumentViewerContainer(
                     viewModel = viewModel,
@@ -68,7 +78,7 @@ fun FeathurApp(viewModel: FeathurViewModel) {
                 )
             }
             else -> {
-                HomeScreen(viewModel = viewModel)
+                HomeScreen(viewModel = viewModel, onOpenSettings = { isSettingsOpen = true })
             }
         }
     }
@@ -76,7 +86,7 @@ fun FeathurApp(viewModel: FeathurViewModel) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun HomeScreen(viewModel: FeathurViewModel) {
+fun HomeScreen(viewModel: FeathurViewModel, onOpenSettings: () -> Unit) {
     val context = LocalContext.current
     val recents by viewModel.recentDocuments.collectAsState()
     var isIntroVisible by remember { mutableStateOf(true) }
@@ -86,6 +96,45 @@ fun HomeScreen(viewModel: FeathurViewModel) {
 
     Scaffold(
         modifier = Modifier.fillMaxSize(),
+        topBar = {
+            TopAppBar(
+                title = {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Image(
+                            painter = painterResource(id = R.drawable.ic_feathur_vector),
+                            contentDescription = "Feathur Logo",
+                            modifier = Modifier
+                                .size(44.dp)
+                                .background(MaterialTheme.colorScheme.primaryContainer, CircleShape)
+                                .padding(8.dp),
+                            colorFilter = ColorFilter.tint(MaterialTheme.colorScheme.onPrimaryContainer)
+                        )
+
+                        Text(
+                            text = "Feathur",
+                            style = androidx.compose.ui.text.TextStyle(
+                                fontFamily = GoogleSansFlexFontFamily,
+                                fontSize = 28.sp,
+                                fontWeight = FontWeight(605),
+                                letterSpacing = (-0.5).sp
+                            ),
+                            color = MaterialTheme.colorScheme.onBackground
+                        )
+                    }
+                },
+                actions = {
+                    IconButton(onClick = onOpenSettings) {
+                        Icon(Icons.Default.Settings, contentDescription = "Settings")
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.background
+                )
+            )
+        },
         floatingActionButton = {
             ExtendedFloatingActionButton(
                 onClick = { fileLauncher.launch(arrayOf(
@@ -95,7 +144,6 @@ fun HomeScreen(viewModel: FeathurViewModel) {
                     "application/vnd.ms-excel",
                     "application/vnd.openxmlformats-officedocument.presentationml.presentation",
                     "application/vnd.ms-powerpoint",
-                    "image/svg+xml",
                     "text/plain"
                 )) },
                 icon = { Icon(Icons.Default.Add, contentDescription = "Open file") },
@@ -112,35 +160,6 @@ fun HomeScreen(viewModel: FeathurViewModel) {
                 .padding(horizontal = 20.dp, vertical = 16.dp),
             verticalArrangement = Arrangement.spacedBy(24.dp)
         ) {
-            // App Header Row
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                // Vector feather logo
-                Image(
-                    painter = painterResource(id = R.drawable.ic_feathur_vector),
-                    contentDescription = "Feathur Logo",
-                    modifier = Modifier
-                        .size(44.dp)
-                        .background(MaterialTheme.colorScheme.primaryContainer, CircleShape)
-                        .padding(8.dp),
-                    colorFilter = ColorFilter.tint(MaterialTheme.colorScheme.onPrimaryContainer)
-                )
-
-                Text(
-                    text = "Feathur",
-                    style = MaterialTheme.typography.headlineLarge.copy(
-                        fontWeight = FontWeight.ExtraBold,
-                        letterSpacing = (-0.5).sp
-                    ),
-                    color = MaterialTheme.colorScheme.onBackground
-                )
-            }
-
             // Beautiful Expressive Intro Card (Material You / Material 3 standard)
             AnimatedVisibility(
                 visible = isIntroVisible,
@@ -216,7 +235,7 @@ fun HomeScreen(viewModel: FeathurViewModel) {
                                     color = MaterialTheme.colorScheme.onPrimaryContainer
                                 )
                                 Text(
-                                    text = "Lightweight offline file opener. Open Word, Excel, PowerPoint, Text, and SVGs instantly without loading heavy suites.",
+                                    text = "Lightweight offline file opener. Open Word, Excel, PowerPoint, and Text instantly without loading heavy suites.",
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
                                 )
@@ -232,7 +251,6 @@ fun HomeScreen(viewModel: FeathurViewModel) {
                                     FormatBadge("DOCX", Color(0xFF2B579A))
                                     FormatBadge("XLSX", Color(0xFF107C41))
                                     FormatBadge("PPTX", Color(0xFFD24726))
-                                    FormatBadge("SVG", Color(0xFF7F44FC))
                                 }
                             }
                         }
@@ -249,7 +267,6 @@ fun HomeScreen(viewModel: FeathurViewModel) {
                     "application/vnd.ms-excel",
                     "application/vnd.openxmlformats-officedocument.presentationml.presentation",
                     "application/vnd.ms-powerpoint",
-                    "image/svg+xml",
                     "text/plain"
                 )) },
                 modifier = Modifier
@@ -394,7 +411,6 @@ fun RecentFileRow(
             "docx", "doc" -> Pair(Icons.Default.Description, Color(0xFF2B579A))
             "xlsx", "xls" -> Pair(Icons.Default.GridOn, Color(0xFF107C41))
             "pptx", "ppt" -> Pair(Icons.Default.Slideshow, Color(0xFFD24726))
-            "svg" -> Pair(Icons.Default.Image, Color(0xFF7F44FC))
             "txt" -> Pair(Icons.Default.Article, Color(0xFF64748B))
             else -> Pair(Icons.Default.InsertDriveFile, Color(0xFF475569))
         }
@@ -475,7 +491,6 @@ fun RecentFileRow(
     }
 }
 
-// Helper to open files
 @Composable
 fun launcherForOpenFile(onResult: (Uri) -> Unit) =
     androidx.activity.compose.rememberLauncherForActivityResult(
@@ -487,7 +502,6 @@ fun launcherForOpenFile(onResult: (Uri) -> Unit) =
         }
     )
 
-// --- Document Viewer Container ---
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DocumentViewerContainer(
@@ -497,11 +511,14 @@ fun DocumentViewerContainer(
     isLoading: Boolean,
     error: String?
 ) {
+    val context = LocalContext.current
     val documentName by viewModel.documentName.collectAsState()
     val searchQuery by viewModel.searchQuery.collectAsState()
     var searchActive by remember { mutableStateOf(false) }
 
-    // PowerPoint specific fullscreen logic
+    val searchMatchIndex by viewModel.searchMatchIndex.collectAsState()
+    val searchMatchCount by viewModel.searchMatchCount.collectAsState()
+
     val presentationMode by viewModel.presentationMode.collectAsState()
 
     BackHandler {
@@ -542,20 +559,17 @@ fun DocumentViewerContainer(
                     }
                 },
                 actions = {
-                    // Search toggle button (Office Docs support search)
-                    if (parsedDoc !is ParsedDocument.Svg) {
-                        IconButton(
-                            onClick = { 
-                                searchActive = !searchActive 
-                                if (!searchActive) viewModel.updateSearchQuery("")
-                            },
-                            modifier = Modifier.testTag("search_toggle_button")
-                        ) {
-                            Icon(
-                                imageVector = if (searchActive) Icons.Default.SearchOff else Icons.Default.Search,
-                                contentDescription = "Search"
-                            )
-                        }
+                    IconButton(
+                        onClick = { 
+                            searchActive = !searchActive 
+                            if (!searchActive) viewModel.updateSearchQuery("")
+                        },
+                        modifier = Modifier.testTag("search_toggle_button")
+                    ) {
+                        Icon(
+                            imageVector = if (searchActive) Icons.Default.SearchOff else Icons.Default.Search,
+                            contentDescription = "Search"
+                        )
                     }
                     if (parsedDoc is ParsedDocument.Slides) {
                         IconButton(onClick = { viewModel.togglePresentationMode(true) }) {
@@ -575,28 +589,60 @@ fun DocumentViewerContainer(
                 .padding(innerPadding)
         ) {
             if (searchActive) {
-                TextField(
-                    value = searchQuery,
-                    onValueChange = { viewModel.updateSearchQuery(it) },
-                    placeholder = { Text("Search inside document...") },
+                Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(8.dp)
-                        .testTag("in_document_search_field")
-                    ,
-                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
-                    trailingIcon = {
-                        if (searchQuery.isNotEmpty()) {
-                            IconButton(onClick = { viewModel.updateSearchQuery("") }) {
-                                Icon(Icons.Default.Clear, contentDescription = null)
+                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    TextField(
+                        value = searchQuery,
+                        onValueChange = { viewModel.updateSearchQuery(it) },
+                        placeholder = { Text("Search inside document...") },
+                        modifier = Modifier
+                            .weight(1f)
+                            .testTag("in_document_search_field")
+                        ,
+                        leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                        trailingIcon = {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                if (searchQuery.isNotEmpty()) {
+                                    Text(
+                                        text = "${if (searchMatchCount > 0) searchMatchIndex + 1 else 0} of $searchMatchCount",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                                        modifier = Modifier.padding(horizontal = 4.dp)
+                                    )
+                                    IconButton(
+                                        onClick = { viewModel.prevSearchMatch() },
+                                        modifier = Modifier.size(36.dp)
+                                    ) {
+                                        Icon(Icons.Default.KeyboardArrowUp, contentDescription = "Prev Match")
+                                    }
+                                    IconButton(
+                                        onClick = { viewModel.nextSearchMatch() },
+                                        modifier = Modifier.size(36.dp)
+                                    ) {
+                                        Icon(Icons.Default.KeyboardArrowDown, contentDescription = "Next Match")
+                                    }
+                                    IconButton(
+                                        onClick = { viewModel.updateSearchQuery("") },
+                                        modifier = Modifier.size(36.dp)
+                                    ) {
+                                        Icon(Icons.Default.Clear, contentDescription = "Clear")
+                                    }
+                                }
                             }
-                        }
-                    },
-                    colors = TextFieldDefaults.colors(
-                        focusedContainerColor = Color.Transparent,
-                        unfocusedContainerColor = Color.Transparent
+                        },
+                        colors = TextFieldDefaults.colors(
+                            focusedContainerColor = Color.Transparent,
+                            unfocusedContainerColor = Color.Transparent
+                        )
                     )
-                )
+                }
             }
 
             Box(modifier = Modifier.fillMaxSize()) {
@@ -617,29 +663,99 @@ fun DocumentViewerContainer(
                         }
                     }
                     error != null -> {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .padding(24.dp),
-                            verticalArrangement = Arrangement.Center,
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.ErrorOutline,
-                                contentDescription = null,
-                                modifier = Modifier.size(64.dp),
-                                tint = MaterialTheme.colorScheme.error
-                            )
-                            Spacer(modifier = Modifier.height(16.dp))
-                            Text(
-                                text = error,
-                                style = MaterialTheme.typography.bodyLarge,
-                                color = MaterialTheme.colorScheme.error,
-                                textAlign = TextAlign.Center
-                            )
-                            Spacer(modifier = Modifier.height(24.dp))
-                            Button(onClick = { viewModel.closeDocument() }) {
-                                Text("Back to Home")
+                        val isPermissionDenial = remember(error) {
+                            (error.contains("permission", ignoreCase = true) ||
+                             error.contains("security", ignoreCase = true) ||
+                             error.contains("denial", ignoreCase = true)) &&
+                            !OfficeParsers.hasFilePermission(context)
+                        }
+
+                        if (isPermissionDenial) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(24.dp),
+                                verticalArrangement = Arrangement.Center,
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Info,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(64.dp),
+                                    tint = MaterialTheme.colorScheme.primary
+                                )
+                                Spacer(modifier = Modifier.height(24.dp))
+                                Text(
+                                    text = "Feathur does not need any permission to function, but if you need that the recently opened documents are still accessible after you close and reopen the app, you have to give feathur files permission.",
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    color = MaterialTheme.colorScheme.onBackground,
+                                    textAlign = TextAlign.Center,
+                                    lineHeight = 24.sp
+                                )
+                                Spacer(modifier = Modifier.height(32.dp))
+                                Button(
+                                    onClick = {
+                                        try {
+                                            val intent = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
+                                                Intent(
+                                                    android.provider.Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
+                                                    Uri.parse("package:${context.packageName}")
+                                                )
+                                            } else {
+                                                Intent(
+                                                    android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                                                    Uri.parse("package:${context.packageName}")
+                                                )
+                                            }
+                                            context.startActivity(intent)
+                                        } catch (e: Exception) {
+                                            try {
+                                                val intent = Intent(android.provider.Settings.ACTION_SETTINGS)
+                                                context.startActivity(intent)
+                                            } catch (ex: Exception) {
+                                                ex.printStackTrace()
+                                            }
+                                        }
+                                    },
+                                    shape = RoundedCornerShape(12.dp),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Text("Yes, grant file management permission")
+                                }
+                                Spacer(modifier = Modifier.height(12.dp))
+                                OutlinedButton(
+                                    onClick = { viewModel.closeDocument() },
+                                    shape = RoundedCornerShape(12.dp),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Text("No, I don't need it - back to home")
+                                }
+                            }
+                        } else {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(24.dp),
+                                verticalArrangement = Arrangement.Center,
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.ErrorOutline,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(64.dp),
+                                    tint = MaterialTheme.colorScheme.error
+                                )
+                                Spacer(modifier = Modifier.height(16.dp))
+                                Text(
+                                    text = error,
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    color = MaterialTheme.colorScheme.error,
+                                    textAlign = TextAlign.Center
+                                )
+                                Spacer(modifier = Modifier.height(24.dp))
+                                Button(onClick = { viewModel.closeDocument() }) {
+                                    Text("Back to Home")
+                                }
                             }
                         }
                     }
@@ -663,19 +779,16 @@ fun DocumentContentPane(
     viewModel: FeathurViewModel
 ) {
     when (doc) {
-        is ParsedDocument.Word -> DocxViewer(doc, searchQuery)
+        is ParsedDocument.Word -> DocxViewer(doc, searchQuery, viewModel)
         is ParsedDocument.Excel -> XlsxViewer(doc, searchQuery, viewModel)
         is ParsedDocument.Slides -> PptxViewer(doc, searchQuery, viewModel)
-        is ParsedDocument.Svg -> SvgViewer(doc)
         is ParsedDocument.Text -> PlainTextViewer(doc, searchQuery)
     }
 }
 
-// --- Renderers ---
-
 // 1. DOCX (Word Document) Screen
 @Composable
-fun DocxViewer(doc: ParsedDocument.Word, searchQuery: String) {
+fun DocxViewer(doc: ParsedDocument.Word, searchQuery: String, viewModel: FeathurViewModel) {
     if (doc.elements.isEmpty()) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Text("No readable text found in this Word file.")
@@ -683,67 +796,141 @@ fun DocxViewer(doc: ParsedDocument.Word, searchQuery: String) {
         return
     }
 
+    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+    val searchMatchIndex by viewModel.searchMatchIndex.collectAsState()
+
+    val matches = remember(doc.elements, searchQuery) {
+        val list = mutableListOf<Int>()
+        if (searchQuery.isNotBlank()) {
+            doc.elements.forEachIndexed { idx, elem ->
+                val text = when (elem) {
+                    is DocxElement.Paragraph -> elem.text
+                    is DocxElement.Table -> elem.rows.flatten().joinToString(" ")
+                }
+                if (text.contains(searchQuery, ignoreCase = true)) {
+                    list.add(idx)
+                }
+            }
+        }
+        list
+    }
+
+    LaunchedEffect(matches) {
+        viewModel.setSearchMatchCount(matches.size)
+    }
+
+    LaunchedEffect(searchMatchIndex, matches) {
+        if (matches.isNotEmpty() && searchMatchIndex in matches.indices) {
+            listState.animateScrollToItem(matches[searchMatchIndex])
+        }
+    }
+
     LazyColumn(
+        state = listState,
         modifier = Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        items(doc.elements) { elem ->
-            when (elem) {
-                is DocxElement.Paragraph -> {
-                    val annotatedString = buildAnnotatedString {
-                        if (elem.runs.isEmpty()) {
-                            append(elem.text)
-                        } else {
-                            elem.runs.forEach { run ->
-                                withStyle(
-                                    style = SpanStyle(
-                                        fontWeight = if (run.isBold) FontWeight.Bold else FontWeight.Normal,
-                                        fontStyle = if (run.isItalic) androidx.compose.ui.text.font.FontStyle.Italic else androidx.compose.ui.text.font.FontStyle.Normal,
-                                        fontSize = run.size.sp
-                                    )
-                                ) {
-                                    append(run.text)
+        itemsIndexed(doc.elements) { idx, elem ->
+            val isCurrentMatch = remember(matches, searchMatchIndex, idx) {
+                matches.isNotEmpty() && searchMatchIndex in matches.indices && matches[searchMatchIndex] == idx
+            }
+            val borderModifier = if (isCurrentMatch) {
+                Modifier.border(2.dp, Color(0xFFFDE047), RoundedCornerShape(8.dp)).padding(4.dp)
+            } else Modifier
+            
+            Box(modifier = borderModifier) {
+                when (elem) {
+                    is DocxElement.Paragraph -> {
+                        val annotatedString = buildAnnotatedString {
+                            if (elem.runs.isEmpty()) {
+                                val textVal = elem.text
+                                if (searchQuery.isNotBlank() && textVal.contains(searchQuery, ignoreCase = true)) {
+                                    var startIdx = 0
+                                    while (true) {
+                                        val matchIdx = textVal.indexOf(searchQuery, startIdx, ignoreCase = true)
+                                        if (matchIdx == -1) {
+                                            append(textVal.substring(startIdx))
+                                            break
+                                        }
+                                        append(textVal.substring(startIdx, matchIdx))
+                                        withStyle(style = SpanStyle(background = Color(0xFFFDE047), color = Color.Black)) {
+                                            append(textVal.substring(matchIdx, matchIdx + searchQuery.length))
+                                        }
+                                        startIdx = matchIdx + searchQuery.length
+                                    }
+                                } else {
+                                    append(textVal)
+                                }
+                            } else {
+                                elem.runs.forEach { run ->
+                                    val runText = run.text
+                                    if (searchQuery.isNotBlank() && runText.contains(searchQuery, ignoreCase = true)) {
+                                        var startIdx = 0
+                                        while (true) {
+                                            val matchIdx = runText.indexOf(searchQuery, startIdx, ignoreCase = true)
+                                            if (matchIdx == -1) {
+                                                withStyle(
+                                                    style = SpanStyle(
+                                                        fontWeight = if (run.isBold) FontWeight.Bold else FontWeight.Normal,
+                                                        fontStyle = if (run.isItalic) androidx.compose.ui.text.font.FontStyle.Italic else androidx.compose.ui.text.font.FontStyle.Normal,
+                                                        fontSize = run.size.sp
+                                                    )
+                                                ) {
+                                                    append(runText.substring(startIdx))
+                                                }
+                                                break
+                                            }
+                                            if (matchIdx > startIdx) {
+                                                withStyle(
+                                                    style = SpanStyle(
+                                                        fontWeight = if (run.isBold) FontWeight.Bold else FontWeight.Normal,
+                                                        fontStyle = if (run.isItalic) androidx.compose.ui.text.font.FontStyle.Italic else androidx.compose.ui.text.font.FontStyle.Normal,
+                                                        fontSize = run.size.sp
+                                                    )
+                                                ) {
+                                                    append(runText.substring(startIdx, matchIdx))
+                                                }
+                                            }
+                                            withStyle(
+                                                style = SpanStyle(
+                                                    fontWeight = if (run.isBold) FontWeight.Bold else FontWeight.Normal,
+                                                    fontStyle = if (run.isItalic) androidx.compose.ui.text.font.FontStyle.Italic else androidx.compose.ui.text.font.FontStyle.Normal,
+                                                    fontSize = run.size.sp,
+                                                    background = Color(0xFFFDE047),
+                                                    color = Color.Black
+                                                )
+                                            ) {
+                                                append(runText.substring(matchIdx, matchIdx + searchQuery.length))
+                                            }
+                                            startIdx = matchIdx + searchQuery.length
+                                        }
+                                    } else {
+                                        withStyle(
+                                            style = SpanStyle(
+                                                fontWeight = if (run.isBold) FontWeight.Bold else FontWeight.Normal,
+                                                fontStyle = if (run.isItalic) androidx.compose.ui.text.font.FontStyle.Italic else androidx.compose.ui.text.font.FontStyle.Normal,
+                                                fontSize = run.size.sp
+                                            )
+                                        ) {
+                                            append(runText)
+                                        }
+                                    }
                                 }
                             }
                         }
-                    }
 
-                    // Perform search highlight
-                    if (searchQuery.isNotBlank() && elem.text.contains(searchQuery, ignoreCase = true)) {
-                        val highlightedString = buildAnnotatedString {
-                            var startIdx = 0
-                            val textVal = elem.text
-                            while (true) {
-                                val matchIdx = textVal.indexOf(searchQuery, startIdx, ignoreCase = true)
-                                if (matchIdx == -1) {
-                                    append(textVal.substring(startIdx))
-                                    break
-                                }
-                                append(textVal.substring(startIdx, matchIdx))
-                                withStyle(style = SpanStyle(background = Color(0xFFFDE047), color = Color.Black)) {
-                                    append(textVal.substring(matchIdx, matchIdx + searchQuery.length))
-                                }
-                                startIdx = matchIdx + searchQuery.length
-                            }
-                        }
-                        Text(
-                            text = highlightedString,
-                            style = MaterialTheme.typography.bodyMedium.copy(lineHeight = 22.sp),
-                            color = MaterialTheme.colorScheme.onBackground
-                        )
-                    } else {
                         Text(
                             text = annotatedString,
                             style = MaterialTheme.typography.bodyMedium.copy(lineHeight = 22.sp),
                             color = MaterialTheme.colorScheme.onBackground
                         )
                     }
-                }
-                is DocxElement.Table -> {
-                    TableRenderer(table = elem, searchQuery = searchQuery)
+                    is DocxElement.Table -> {
+                        TableRenderer(table = elem, searchQuery = searchQuery)
+                    }
                 }
             }
         }
@@ -829,30 +1016,55 @@ fun XlsxViewer(
         return
     }
 
+    val context = LocalContext.current
     val activeSheetIndex by viewModel.activeSheetIndex.collectAsState()
     val activeSheet = workbook.sheets.getOrNull(activeSheetIndex) ?: workbook.sheets.first()
 
+    var selectedCell by remember(activeSheetIndex) { mutableStateOf<Pair<Int, Int>?>(null) }
+    var fitCellsToDataSize by remember { mutableStateOf(false) }
+
     Column(modifier = Modifier.fillMaxSize()) {
-        // Dynamic List of sheet names/tabs
-        LazyRow(
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .background(MaterialTheme.colorScheme.surfaceColorAtElevation(2.dp))
-                .padding(vertical = 8.dp, horizontal = 12.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                .padding(vertical = 4.dp, horizontal = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            itemsIndexed(workbook.sheets) { index, sheet ->
-                val isActive = index == activeSheetIndex
-                FilterChip(
-                    selected = isActive,
-                    onClick = { viewModel.setActiveSheetIndex(index) },
-                    label = { Text(sheet.name) },
-                    modifier = Modifier.testTag("sheet_tab_$index")
+            LazyRow(
+                modifier = Modifier.weight(1f),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                itemsIndexed(workbook.sheets) { index, sheet ->
+                    val isActive = index == activeSheetIndex
+                    FilterChip(
+                        selected = isActive,
+                        onClick = { viewModel.setActiveSheetIndex(index) },
+                        label = { Text(sheet.name) },
+                        modifier = Modifier.testTag("sheet_tab_$index")
+                    )
+                }
+            }
+
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                modifier = Modifier.padding(start = 8.dp)
+            ) {
+                Checkbox(
+                    checked = fitCellsToDataSize,
+                    onCheckedChange = { fitCellsToDataSize = it }
+                )
+                Text(
+                    text = "Fit cells",
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Medium
                 )
             }
         }
 
-        // Real Interactive Excel-like Cells Canvas Grid Scroll Layout
         Box(
             modifier = Modifier
                 .weight(1f)
@@ -864,29 +1076,158 @@ fun XlsxViewer(
                     Text("This sheet is empty.")
                 }
             } else {
-                SpreadsheetGrid(sheet = activeSheet, searchQuery = searchQuery)
+                SpreadsheetGrid(
+                    sheet = activeSheet,
+                    searchQuery = searchQuery,
+                    viewModel = viewModel,
+                    fitCellsToDataSize = fitCellsToDataSize,
+                    selectedCell = selectedCell,
+                    onCellClick = { r, c -> selectedCell = Pair(r, c) }
+                )
+            }
+        }
+
+        val clipboardManager = LocalClipboardManager.current
+        val cellVal = remember(selectedCell, activeSheet) {
+            if (selectedCell != null) {
+                activeSheet.rows[selectedCell!!.first]?.get(selectedCell!!.second) ?: ""
+            } else ""
+        }
+
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(MaterialTheme.colorScheme.surfaceColorAtElevation(4.dp))
+                .border(width = 0.5.dp, color = MaterialTheme.colorScheme.outline.copy(alpha = 0.15f)),
+            color = MaterialTheme.colorScheme.surfaceColorAtElevation(2.dp)
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                ) {
+                    Text(
+                        text = if (selectedCell != null) "Cell ${getColLetter(selectedCell!!.second)}${selectedCell!!.first + 1}" else "No cell selected",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = cellVal.ifEmpty { "Empty cell" },
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = if (cellVal.isEmpty()) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f) else MaterialTheme.colorScheme.onSurface,
+                        maxLines = 3,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.horizontalScroll(rememberScrollState())
+                    )
+                }
+
+                if (selectedCell != null && cellVal.isNotEmpty()) {
+                    IconButton(
+                        onClick = {
+                            clipboardManager.setText(AnnotatedString(cellVal))
+                            Toast.makeText(context, "Copied cell content", Toast.LENGTH_SHORT).show()
+                        },
+                        modifier = Modifier.padding(start = 8.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.ContentCopy,
+                            contentDescription = "Copy Content",
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
             }
         }
     }
 }
 
 @Composable
-fun SpreadsheetGrid(sheet: ExcelSheet, searchQuery: String) {
-    // Spreadsheet scroll handles
+fun SpreadsheetGrid(
+    sheet: ExcelSheet, 
+    searchQuery: String,
+    viewModel: FeathurViewModel,
+    fitCellsToDataSize: Boolean,
+    selectedCell: Pair<Int, Int>?,
+    onCellClick: (Int, Int) -> Unit
+) {
+    val searchMatchIndex by viewModel.searchMatchIndex.collectAsState()
+    
+    val matches = remember(sheet, searchQuery) {
+        val list = mutableListOf<Pair<Int, Int>>()
+        if (searchQuery.isNotBlank()) {
+            val maxCols = sheet.maxCol.coerceAtLeast(0)
+            val maxRows = sheet.maxRow.coerceAtLeast(0)
+            for (r in 0..maxRows) {
+                for (c in 0..maxCols) {
+                    val cellVal = sheet.rows[r]?.get(c) ?: ""
+                    if (cellVal.contains(searchQuery, ignoreCase = true)) {
+                        list.add(Pair(r, c))
+                    }
+                }
+            }
+        }
+        list
+    }
+
+    LaunchedEffect(matches) {
+        viewModel.setSearchMatchCount(matches.size)
+    }
+
     val horizontalScrollState = rememberScrollState()
     val verticalScrollState = rememberScrollState()
+    val density = LocalDensity.current
 
     val maxCols = sheet.maxCol.coerceAtLeast(1)
     val maxRows = sheet.maxRow.coerceAtLeast(1)
 
+    val columnWidths = remember(sheet, fitCellsToDataSize) {
+        val widths = mutableMapOf<Int, Int>()
+        for (c in 0..maxCols) {
+            if (fitCellsToDataSize) {
+                var maxLen = 4
+                for (r in 0..maxRows) {
+                    val cellVal = sheet.rows[r]?.get(c) ?: ""
+                    if (cellVal.length > maxLen) {
+                        maxLen = cellVal.length
+                    }
+                }
+                widths[c] = (maxLen * 8 + 24).coerceIn(80, 350)
+            } else {
+                widths[c] = 108
+            }
+        }
+        widths
+    }
+
+    LaunchedEffect(searchMatchIndex, matches) {
+        if (matches.isNotEmpty() && searchMatchIndex in matches.indices) {
+            val (matchRow, matchCol) = matches[searchMatchIndex]
+            val yOffset = with(density) { (matchRow * 38).dp.toPx() }
+            var xOffsetSum = 0
+            for (c in 0 until matchCol) {
+                xOffsetSum += columnWidths[c] ?: 108
+            }
+            val xOffset = with(density) { xOffsetSum.dp.toPx() }
+
+            verticalScrollState.animateScrollTo(yOffset.toInt())
+            horizontalScrollState.animateScrollTo(xOffset.toInt())
+            onCellClick(matchRow, matchCol)
+        }
+    }
+
     Row(modifier = Modifier.fillMaxSize()) {
-        // Vertical Row Indexes Headers (Fixed 1, 2, 3 column)
         Column(
             modifier = Modifier
                 .width(42.dp)
                 .verticalScroll(verticalScrollState)
         ) {
-            // Corner spacer for col labels header row
             Box(
                 modifier = Modifier
                     .height(28.dp)
@@ -895,7 +1236,6 @@ fun SpreadsheetGrid(sheet: ExcelSheet, searchQuery: String) {
                     .border(0.5.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
             )
 
-            // Number headers row elements
             for (r in 0..maxRows) {
                 Box(
                     modifier = Modifier
@@ -914,19 +1254,18 @@ fun SpreadsheetGrid(sheet: ExcelSheet, searchQuery: String) {
             }
         }
 
-        // Grid canvas section (Both vert and horiz scrollable)
         Column(
             modifier = Modifier
                 .weight(1f)
                 .verticalScroll(verticalScrollState)
                 .horizontalScroll(horizontalScrollState)
         ) {
-            // Horizontal Column Letters Label Headers (A, B, C...)
             Row {
                 for (c in 0..maxCols) {
+                    val colWidth = columnWidths[c] ?: 108
                     Box(
                         modifier = Modifier
-                            .width(108.dp)
+                            .width(colWidth.dp)
                             .height(28.dp)
                             .background(MaterialTheme.colorScheme.surfaceColorAtElevation(12.dp))
                             .border(0.5.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)),
@@ -941,7 +1280,6 @@ fun SpreadsheetGrid(sheet: ExcelSheet, searchQuery: String) {
                 }
             }
 
-            // Cell matrix layout cells row-by-row
             for (r in 0..maxRows) {
                 Row {
                     for (c in 0..maxCols) {
@@ -949,24 +1287,41 @@ fun SpreadsheetGrid(sheet: ExcelSheet, searchQuery: String) {
                         val matchesSearch = remember(cellVal, searchQuery) {
                             searchQuery.isNotBlank() && cellVal.contains(searchQuery, ignoreCase = true)
                         }
+                        val isSelected = selectedCell == Pair(r, c)
+                        val isCurrentSearchMatch = remember(matches, searchMatchIndex, r, c) {
+                            matches.isNotEmpty() && searchMatchIndex in matches.indices && matches[searchMatchIndex] == Pair(r, c)
+                        }
+                        val colWidth = columnWidths[c] ?: 108
 
                         Box(
                             modifier = Modifier
-                                .width(108.dp)
+                                .width(colWidth.dp)
                                 .height(38.dp)
                                 .background(
-                                    if (matchesSearch) Color(0xFFFEF08A) // Match highlight yellow
-                                    else MaterialTheme.colorScheme.surface
+                                    when {
+                                        isCurrentSearchMatch -> Color(0xFFFDE047)
+                                        matchesSearch -> Color(0xFFFEF08A)
+                                        isSelected -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
+                                        else -> MaterialTheme.colorScheme.surface
+                                    }
                                 )
-                                .border(0.5.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.12f))
+                                .border(
+                                    width = if (isSelected) 2.dp else 0.5.dp,
+                                    color = when {
+                                        isSelected -> Color(0xFF107C41)
+                                        matchesSearch -> Color(0xFFCA8A04)
+                                        else -> MaterialTheme.colorScheme.outline.copy(alpha = 0.12f)
+                                    }
+                                )
+                                .clickable { onCellClick(r, c) }
                                 .padding(horizontal = 6.dp, vertical = 4.dp),
                             contentAlignment = Alignment.CenterStart
                         ) {
                             Text(
                                 text = cellVal,
                                 style = MaterialTheme.typography.bodySmall,
-                                color = if (matchesSearch) Color.Black else MaterialTheme.colorScheme.onSurface,
-                                maxLines = 1,
+                                color = if (isCurrentSearchMatch || matchesSearch) Color.Black else MaterialTheme.colorScheme.onSurface,
+                                maxLines = if (fitCellsToDataSize) 2 else 1,
                                 overflow = TextOverflow.Ellipsis
                             )
                         }
@@ -1001,8 +1356,36 @@ fun PptxViewer(
         return
     }
 
-    // Displays slides in a beautiful responsive scrolling grid list
+    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+    val searchMatchIndex by viewModel.searchMatchIndex.collectAsState()
+
+    val matches = remember(doc.presentation.slides, searchQuery) {
+        val list = mutableListOf<Int>()
+        if (searchQuery.isNotBlank()) {
+            doc.presentation.slides.forEachIndexed { idx, slide ->
+                val text = slide.elements.mapNotNull {
+                    if (it is SlideGraphicElement.TextBlock) it.text else null
+                }.joinToString(" ")
+                if (text.contains(searchQuery, ignoreCase = true)) {
+                    list.add(idx)
+                }
+            }
+        }
+        list
+    }
+
+    LaunchedEffect(matches) {
+        viewModel.setSearchMatchCount(matches.size)
+    }
+
+    LaunchedEffect(searchMatchIndex, matches) {
+        if (matches.isNotEmpty() && searchMatchIndex in matches.indices) {
+            listState.animateScrollToItem(matches[searchMatchIndex] + 1)
+        }
+    }
+
     LazyColumn(
+        state = listState,
         modifier = Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
@@ -1025,13 +1408,13 @@ fun PptxViewer(
         }
 
         items(doc.presentation.slides) { slide ->
-            SlideCard(slide = slide, searchQuery = searchQuery)
+            GraphicalSlideCard(slide = slide, searchQuery = searchQuery)
         }
     }
 }
 
 @Composable
-fun SlideCard(slide: SlideItem, searchQuery: String) {
+fun GraphicalSlideCard(slide: SlideItem, searchQuery: String) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -1041,66 +1424,94 @@ fun SlideCard(slide: SlideItem, searchQuery: String) {
         shape = RoundedCornerShape(16.dp),
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(20.dp),
-            verticalArrangement = Arrangement.SpaceBetween
-        ) {
-            var titleText = "Slide ${slide.index}"
-            val bulletItems = mutableListOf<String>()
-
-            slide.elements.forEach { elem ->
-                when (elem) {
-                    is SlideElement.Title -> titleText = elem.text
-                    is SlideElement.Body -> bulletItems.addAll(elem.bullets)
-                    is SlideElement.TextBlock -> bulletItems.add(elem.text)
-                }
-            }
-
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                // Title
-                HighlightText(
-                    text = titleText,
-                    query = searchQuery,
-                    style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
-                    color = MaterialTheme.colorScheme.primary
+        Box(modifier = Modifier.fillMaxSize()) {
+            GraphicalSlideItem(slide = slide, searchQuery = searchQuery)
+            Surface(
+                color = Color.Black.copy(alpha = 0.6f),
+                shape = RoundedCornerShape(topStart = 8.dp),
+                modifier = Modifier.align(Alignment.BottomEnd)
+            ) {
+                Text(
+                    text = "${slide.index}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color.White,
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                 )
-
-                // Bullet contents
-                if (bulletItems.isNotEmpty()) {
-                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        bulletItems.take(4).forEach { bullet ->
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Text("•", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
-                                HighlightText(
-                                    text = bullet,
-                                    query = searchQuery,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurface,
-                                    maxLines = 1
-                                )
-                            }
-                        }
-                        if (bulletItems.size > 4) {
-                            Text("...", style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(start = 14.dp))
-                        }
-                    }
-                }
             }
-
-            // Bottom index indicator
-            Text(
-                text = "${slide.index}",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
-                modifier = Modifier.align(Alignment.End)
-            )
         }
     }
 }
 
-// Custom text search highlighter
+@Composable
+fun GraphicalSlideItem(slide: SlideItem, searchQuery: String) {
+    BoxWithConstraints(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color(slide.backgroundColor))
+    ) {
+        val containerWidth = maxWidth
+        val containerHeight = maxHeight
+
+        slide.elements.forEach { element ->
+            when (element) {
+                is SlideGraphicElement.ShapeBlock -> {
+                    // Do not render vector background/decoration shapes to avoid overlapping actual content
+                }
+                is SlideGraphicElement.ImageBlock -> {
+                    val bitmap = remember(element.bitmap) {
+                        try {
+                            element.bitmap.asImageBitmap()
+                        } catch (e: Exception) {
+                            null
+                        }
+                    }
+                    if (bitmap != null) {
+                        Image(
+                            bitmap = bitmap,
+                            contentDescription = null,
+                            contentScale = androidx.compose.ui.layout.ContentScale.FillBounds,
+                            modifier = Modifier
+                                .offset(
+                                    x = containerWidth * element.x,
+                                    y = containerHeight * element.y
+                                )
+                                .size(
+                                    width = containerWidth * element.width,
+                                    height = containerHeight * element.height
+                                )
+                        )
+                    }
+                }
+                is SlideGraphicElement.TextBlock -> {
+                    val widthFraction = remember(element.width, element.x) {
+                        if (element.width > 0.05f) element.width else (0.9f - element.x).coerceAtLeast(0.5f)
+                    }
+                    Box(
+                        modifier = Modifier
+                            .offset(
+                                x = containerWidth * element.x,
+                                y = containerHeight * element.y
+                            )
+                            .width(containerWidth * widthFraction)
+                    ) {
+                        HighlightText(
+                            text = element.text,
+                            query = searchQuery,
+                            style = androidx.compose.ui.text.TextStyle(
+                                fontSize = (element.fontSize * (containerHeight.value / 400f)).coerceAtLeast(10f).sp,
+                                fontWeight = if (element.isBold) FontWeight.Bold else FontWeight.Normal,
+                                fontStyle = if (element.isItalic) androidx.compose.ui.text.font.FontStyle.Italic else androidx.compose.ui.text.font.FontStyle.Normal,
+                                color = Color(element.textColor)
+                            ),
+                            color = Color(element.textColor)
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
 @Composable
 fun HighlightText(
     text: String,
@@ -1143,72 +1554,27 @@ fun FullScreenPresentation(viewModel: FeathurViewModel, presentation: SlideDocum
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.Black) // Strict sleek darkness themeing
+            .background(Color.Black)
             .testTag("fullscreen_presentation_bg")
     ) {
-        // Render current slide zoomed/centered beautifully
-        Column(
+        Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(48.dp),
-            verticalArrangement = Arrangement.Center,
-            horizontalAlignment = Alignment.CenterHorizontally
+                .padding(48.dp)
+                .align(Alignment.Center),
+            contentAlignment = Alignment.Center
         ) {
-            var slideTitle = "Slide ${currentSlide.index}"
-            val slideBullets = mutableListOf<String>()
-
-            currentSlide.elements.forEach { elem ->
-                when (elem) {
-                    is SlideElement.Title -> slideTitle = elem.text
-                    is SlideElement.Body -> slideBullets.addAll(elem.bullets)
-                    is SlideElement.TextBlock -> slideBullets.add(elem.text)
-                }
-            }
-
-            // Large White display typography for presentation title
-            Text(
-                text = slideTitle,
-                style = MaterialTheme.typography.headlineLarge.copy(
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 32.sp
-                ),
-                color = Color.White,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.padding(bottom = 24.dp)
-            )
-
-            if (slideBullets.isNotEmpty()) {
-                Column(
-                    modifier = Modifier.widthIn(max = 600.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp),
-                    horizontalAlignment = Alignment.Start
-                ) {
-                    slideBullets.forEach { bullet ->
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(12.dp),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text(
-                                "•",
-                                style = MaterialTheme.typography.titleLarge,
-                                color = MaterialTheme.colorScheme.primary
-                            )
-                            Text(
-                                text = bullet,
-                                style = MaterialTheme.typography.titleLarge.copy(
-                                    fontWeight = FontWeight.Normal,
-                                    fontSize = 20.sp,
-                                    lineHeight = 28.sp
-                                ),
-                                color = Color.White.copy(alpha = 0.9f)
-                            )
-                        }
-                    }
-                }
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .aspectRatio(16f / 9f)
+                    .clip(RoundedCornerShape(8.dp))
+                    .border(1.dp, Color.DarkGray, RoundedCornerShape(8.dp))
+            ) {
+                GraphicalSlideItem(slide = currentSlide, searchQuery = "")
             }
         }
 
-        // Left 30% Tap area gesture support (Prev Slide)
         Box(
             modifier = Modifier
                 .fillMaxHeight()
@@ -1223,7 +1589,6 @@ fun FullScreenPresentation(viewModel: FeathurViewModel, presentation: SlideDocum
                 }
         )
 
-        // Right 70% Tap area gesture support (Next Slide)
         Box(
             modifier = Modifier
                 .fillMaxHeight()
@@ -1238,7 +1603,6 @@ fun FullScreenPresentation(viewModel: FeathurViewModel, presentation: SlideDocum
                 }
         )
 
-        // Bottom HUD control bar
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -1293,69 +1657,6 @@ fun FullScreenPresentation(viewModel: FeathurViewModel, presentation: SlideDocum
     }
 }
 
-// 5. SVG Viewer with dynamic panning, pinching, and zoom controls
-@Composable
-fun SvgViewer(doc: ParsedDocument.Svg) {
-    var scale by remember { mutableStateOf(1f) }
-    var offset by remember { mutableStateOf(Offset.Zero) }
-
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color.Transparent)
-    ) {
-        // Hardware accelerated vector representation using WebView loaded with transparent body
-        // Allows zoom controls, page-views, scroll buffers out-of-the-box correctly.
-        AndroidView(
-            factory = { context ->
-                WebView(context).apply {
-                    settings.useWideViewPort = true
-                    settings.loadWithOverviewMode = true
-                    settings.builtInZoomControls = true
-                    settings.displayZoomControls = true
-                    settings.domStorageEnabled = true
-                    setBackgroundColor(0) // Transparent BG to align with current Material3 light/dark style
-                }
-            },
-            update = { webView ->
-                val html = """
-                    <html>
-                    <head>
-                        <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=0.5, maximum-scale=5.0, user-scalable=yes">
-                        <style>
-                            html, body {
-                                margin: 0;
-                                padding: 0;
-                                width: 100%;
-                                height: 100%;
-                                display: flex;
-                                justify-content: center;
-                                align-items: center;
-                                background-color: transparent;
-                            }
-                            svg {
-                                max-width: 100%;
-                                max-height: 100%;
-                                width: auto;
-                                height: auto;
-                            }
-                        </style>
-                    </head>
-                    <body>
-                        ${doc.rawSvgText}
-                    </body>
-                    </html>
-                """.trimIndent()
-                webView.loadDataWithBaseURL(null, html, "text/html", "utf-8", null)
-            },
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(16.dp)
-                .testTag("svg_webview_canvas")
-        )
-    }
-}
-
 // 6. Support for simple plain text documents (.txt fallback viewer)
 @Composable
 fun PlainTextViewer(doc: ParsedDocument.Text, searchQuery: String) {
@@ -1377,4 +1678,187 @@ fun PlainTextViewer(doc: ParsedDocument.Text, searchQuery: String) {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun SettingsScreen(viewModel: FeathurViewModel, onBack: () -> Unit) {
+    val context = LocalContext.current
+    val darkModeSetting by viewModel.darkModeSetting.collectAsState()
+    val themeSetting by viewModel.themeSetting.collectAsState()
+    val uriHandler = LocalUriHandler.current
 
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("Settings") },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceColorAtElevation(4.dp)
+                )
+            )
+        }
+    ) { innerPadding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+                .verticalScroll(rememberScrollState())
+                .padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(24.dp)
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(
+                    text = "Appearance",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.Bold
+                )
+
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(text = "Dark mode", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        val modes = listOf("off" to "Off", "on" to "On", "adapt_device" to "Adapt device")
+                        modes.forEach { (value, label) ->
+                            FilterChip(
+                                selected = darkModeSetting == value,
+                                onClick = { viewModel.setDarkModeSetting(value) },
+                                label = { Text(label) }
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(text = "Theme", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        val themes = listOf("device_wallpaper" to "Device wallpaper", "monochrome" to "Monochrome")
+                        themes.forEach { (value, label) ->
+                            FilterChip(
+                                selected = themeSetting == value,
+                                onClick = { viewModel.setThemeSetting(value) },
+                                label = { Text(label) }
+                            )
+                        }
+                    }
+                }
+            }
+
+            HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.15f))
+
+            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                Text(
+                    text = "About and more",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.Bold
+                )
+
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Image(
+                        painter = painterResource(id = R.drawable.ic_feathur_vector),
+                        contentDescription = "Feathur Logo",
+                        modifier = Modifier
+                            .size(44.dp)
+                            .background(MaterialTheme.colorScheme.primaryContainer, CircleShape)
+                            .padding(8.dp),
+                        colorFilter = ColorFilter.tint(MaterialTheme.colorScheme.onPrimaryContainer)
+                    )
+
+                    Text(
+                        text = "Feathur",
+                        style = androidx.compose.ui.text.TextStyle(
+                            fontFamily = GoogleSansFlexFontFamily,
+                            fontSize = 28.sp,
+                            fontWeight = FontWeight(605),
+                            letterSpacing = (-0.5).sp
+                        ),
+                        color = MaterialTheme.colorScheme.onBackground
+                    )
+                }
+
+                Text(
+                    text = "A simple, lightweight office files (.docx, .xlsx, .pptx etc.) viewer. Open all these file formats on your device without downloading full fldged heavy office apps. Why carry so much apps just for opening some files? Use feathur. Straightforward, simple, offline, ad-free and open source.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f),
+                    lineHeight = 20.sp
+                )
+
+                Spacer(modifier = Modifier.height(4.dp))
+
+                Text(
+                    text = "Connect with the creator (@sarthakchakraborty12) :",
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    val socials = listOf(
+                        Triple("GitHub", "https://github.com/sarthakchakraborty12", Icons.Default.Code),
+                        Triple("Behance", "https://behance.net/sarthakchakraborty12", Icons.Default.Palette),
+                        Triple("LinkedIn", "https://linkedin.com/in/sarthakchakraborty12", Icons.Default.Work),
+                        Triple("Instagram", "https://instagram.com/sarthouk", Icons.Default.CameraAlt)
+                    )
+                    socials.forEach { (name, url, icon) ->
+                        OutlinedButton(
+                            onClick = { uriHandler.openUri(url) },
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
+                        ) {
+                            Icon(icon, contentDescription = name, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(name, style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(4.dp))
+
+                Text(
+                    text = "Follow @platnummtech and @appbasket :",
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    val follow = listOf(
+                        Triple("GitHub", "https://github.com/Platnumm", Icons.Default.Code),
+                        Triple("LinkedIn", "https://www.linkedin.com/company/platnummtech", Icons.Default.Work),
+                        Triple("Instagram", "https://instagram.com/app.basket", Icons.Default.CameraAlt)
+                    )
+                    follow.forEach { (name, url, icon) ->
+                        OutlinedButton(
+                            onClick = { uriHandler.openUri(url) },
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
+                        ) {
+                            Icon(icon, contentDescription = name, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(name, style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

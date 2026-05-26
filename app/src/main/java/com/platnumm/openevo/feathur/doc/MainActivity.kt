@@ -15,6 +15,9 @@ import com.platnumm.openevo.feathur.doc.ui.theme.MyApplicationTheme
 import com.platnumm.openevo.feathur.doc.viewmodel.FeathurViewModel
 import com.platnumm.openevo.feathur.doc.viewmodel.FeathurViewModelFactory
 
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+
 class MainActivity : ComponentActivity() {
 
     private val database by lazy { FeathurDatabase.getDatabase(applicationContext) }
@@ -22,7 +25,7 @@ class MainActivity : ComponentActivity() {
     
     // Modern simple DI via ViewModelProvider Factory
     private val viewModel: FeathurViewModel by viewModels {
-        FeathurViewModelFactory(repository)
+        FeathurViewModelFactory(repository, applicationContext)
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -33,7 +36,12 @@ class MainActivity : ComponentActivity() {
         handleIntent(intent)
 
         setContent {
-            MyApplicationTheme {
+            val darkModeSetting by viewModel.darkModeSetting.collectAsState()
+            val themeSetting by viewModel.themeSetting.collectAsState()
+            MyApplicationTheme(
+                darkModeSetting = darkModeSetting,
+                themeSetting = themeSetting
+            ) {
                 FeathurApp(viewModel = viewModel)
             }
         }

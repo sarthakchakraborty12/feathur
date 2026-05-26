@@ -18,6 +18,9 @@ interface DocumentHistoryDao {
     @Query("SELECT * FROM document_history ORDER BY lastOpenedTimestamp DESC")
     fun getRecentDocuments(): Flow<List<DocumentHistory>>
 
+    @Query("SELECT uriString FROM document_history ORDER BY lastOpenedTimestamp DESC LIMIT 15")
+    fun getRecentUriStringsSync(): List<String>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertDocument(document: DocumentHistory)
 

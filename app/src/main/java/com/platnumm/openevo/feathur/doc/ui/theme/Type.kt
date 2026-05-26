@@ -6,6 +6,25 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 
+import androidx.compose.ui.text.font.Font
+import androidx.compose.ui.text.font.FontVariation
+import androidx.compose.ui.text.ExperimentalTextApi
+import com.platnumm.openevo.feathur.doc.R
+
+@OptIn(ExperimentalTextApi::class)
+val GoogleSansFlexFontFamily = FontFamily(
+    Font(
+        resId = R.font.google_sans_flex,
+        variationSettings = FontVariation.Settings(
+            FontVariation.Setting("wght", 605f),
+            FontVariation.Setting("GRAD", 42f),
+            FontVariation.Setting("slnt", -5f),
+            FontVariation.Setting("wdth", 119.7f),
+            FontVariation.Setting("ROND", 37f)
+        )
+    )
+)
+
 // Set of Material typography styles to start with
 val Typography =
   Typography(
