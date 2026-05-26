@@ -124,3 +124,11 @@ To execute all local tests and screenshot capture runs:
   ```
   *Note: A post-build script configured in the Gradle files will automatically copy the finalized release bundle to the root `/releases` directory as `feathur-release.apk`.*
 
+---
+
+## License 📄
+This project is licensed under the **MIT License** - see the [LICENSE](LICENSE) file for details.
+
+### TL;DR Permissions Summary:
+- ✅ **You can**: Use, copy, modify, merge, publish, distribute, sublicense, and sell this software.
+- ⚠️ **Under the condition**: You must include the original copyright and permission notice in all copies (giving proper attribution to the creator).
